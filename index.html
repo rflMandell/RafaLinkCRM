@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RafaLink — Inteligência em Gestão CRM</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ── TOAST CONTAINER ── -->
+<div id="toast-container"></div>
+
+<!-- ══════════════════════════════
+     LOGIN PAGE
+══════════════════════════════ -->
+<div id="page-login" class="page active">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="logo-icon">RL</div>
+      <h1>RafaLink</h1>
+      <p>Inteligência em Gestão CRM</p>
+    </div>
+
+    <div class="login-title">Bem-vindo de volta</div>
+    <div class="login-sub">Insira suas credenciais para acessar sua conta.</div>
+
+    <div class="field-group">
+      <div class="field-label">Usuário</div>
+      <div class="field-wrap">
+        <span class="field-icon" id="login-icon-at"></span>
+        <input type="text" id="login-user" placeholder="ex: alex.rafa" autocomplete="username">
+      </div>
+      <div class="field-error" id="login-user-err">Usuário inválido</div>
+    </div>
+
+    <div class="field-group">
+      <div class="field-label">
+        Senha
+        <a href="#">Esqueceu a senha?</a>
+      </div>
+      <div class="field-wrap">
+        <span class="field-icon" id="login-icon-lock"></span>
+        <input type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password">
+        <button class="eye-btn" id="eye-toggle" onclick="togglePass()" type="button"></button>
+      </div>
+      <div class="field-error" id="login-pass-err">Senha incorreta</div>
+    </div>
+
+    <div id="login-err-general" class="field-error" style="margin-bottom:12px;font-size:13px;"></div>
+
+    <button class="btn-login" onclick="doLogin()">Entrar →</button>
+
+    <div class="divider">Ou continue com</div>
+    <div class="sso-btns">
+      <button class="btn-sso">Google</button>
+      <button class="btn-sso">SSO</button>
+    </div>
+
+    <div class="login-footer">Não possui conta? <a href="#">Criar conta agora</a></div>
+    <div class="login-copy">© 2024 RAFALINK CORPORATION · TERMOS · PRIVACIDADE</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════
+     APP PAGE
+══════════════════════════════ -->
+<div id="page-app" class="page">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">RafaLink</div>
+    <div class="sidebar-user">
+      <div class="avatar" id="sb-avatar">A</div>
+      <div class="sidebar-user-info">
+        <div class="sidebar-user-name" id="sb-name">Alex Rafa</div>
+        <div class="sidebar-user-role" id="sb-role">Lead Administrator</div>
+      </div>
+    </div>
+    <nav id="sidebar-nav"></nav>
+    <div class="sidebar-spacer"></div>
+    <button class="btn-logout" onclick="doLogout()">
+      <!-- icon injected by JS via ICONS.logout -->
+      <span id="logout-icon" style="display:flex;align-items:center"></span>
+      Sair
+    </button>
+  </aside>
+
+  <!-- MAIN AREA -->
+  <div class="main-area">
+    <header class="topbar">
+      <div class="topbar-brand">RafaLink</div>
+      <div class="topbar-actions">
+        <div class="topbar-btn" onclick="navigate('notifications')" title="Notificações">
+          <span id="topbar-bell" style="display:flex;align-items:center"></span>
+          <span class="notif-dot" id="notif-dot" style="display:none"></span>
+        </div>
+        <div class="topbar-btn" title="Perfil">
+          <span id="topbar-user" style="display:flex;align-items:center"></span>
+        </div>
+      </div>
+    </header>
+
+    <div class="content" id="main-content">
+
+      <!-- ── ADMIN DASHBOARD ── -->
+      <div class="section" id="sec-dashboard"></div>
+
+      <!-- ── CLIENT DASHBOARD ── -->
+      <div class="section" id="sec-dashboard-client"></div>
+
+      <!-- ── CLIENTS ── -->
+      <div class="section" id="sec-clients">
+        <div class="page-title">Clientes</div>
+        <div class="page-sub">Gerencie e acompanhe todos os clientes da plataforma.</div>
+        <div class="search-bar">
+          <div class="search-input-wrap">
+            <span class="search-icon" id="client-search-icon"></span>
+            <input type="text" id="client-search" placeholder="Buscar por nome, e-mail ou empresa…" oninput="renderClientsTable()">
+          </div>
+          <button class="btn btn-gold" onclick="openModal('modal-add-client')">+ Novo Cliente</button>
+        </div>
+        <div class="card">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Cliente</th><th>Empresa</th><th>E-mail</th>
+                  <th>Status</th><th>Agend.</th><th>Ações</th>
+                </tr>
+              </thead>
+              <tbody id="clients-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── DOCUMENTS ── -->
+      <div class="section" id="sec-documents">
+        <div class="page-title">Documentos</div>
+        <div class="page-sub">Repositório central de documentos e arquivos.</div>
+        <div class="search-bar">
+          <div class="search-input-wrap">
+            <span class="search-icon" id="doc-search-icon"></span>
+            <input type="text" id="doc-search" placeholder="Buscar documentos…" oninput="renderDocsTable()">
+          </div>
+          <button class="btn btn-gold" onclick="openModal('modal-add-doc')">+ Novo Documento</button>
+        </div>
+        <div class="card">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Documento</th><th>Tipo</th><th>Cliente</th>
+                  <th>Status</th><th>Data</th><th>Ações</th>
+                </tr>
+              </thead>
+              <tbody id="docs-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── APPOINTMENTS ── -->
+      <div class="section" id="sec-appointments">
+        <div class="page-title">Agendamentos</div>
+        <div class="page-sub">Calendário e lista de consultas e reuniões.</div>
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-title">
+              Calendário — Maio 2026
+              <button class="btn btn-gold btn-sm" onclick="openModal('modal-add-appt')">+ Agendar</button>
+            </div>
+            <div class="cal-header">
+              <span>Dom</span><span>Seg</span><span>Ter</span>
+              <span>Qua</span><span>Qui</span><span>Sex</span><span>Sáb</span>
+            </div>
+            <div class="mini-cal" id="mini-cal"></div>
+          </div>
+          <div class="card">
+            <div class="card-title">Próximos Agendamentos</div>
+            <div id="appt-list"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── NOTIFICATIONS ── -->
+      <div class="section" id="sec-notifications">
+        <div class="page-title">Notificações</div>
+        <div class="page-sub">Central de alertas e comunicados.</div>
+        <div class="card">
+          <div class="card-title">
+            Todas as Notificações
+            <button class="btn btn-outline btn-sm" onclick="markAllRead()">Marcar todas como lidas</button>
+          </div>
+          <div id="notif-list"></div>
+        </div>
+      </div>
+
+      <!-- ── LEADS ── -->
+      <div class="section" id="sec-leads">
+        <div class="page-title">Leads</div>
+        <div class="page-sub">Pipeline de leads e oportunidades.</div>
+        <div style="display:flex;justify-content:flex-end;margin-bottom:16px;">
+          <button class="btn btn-gold" onclick="openModal('modal-add-lead')">+ Novo Lead</button>
+        </div>
+        <div class="kanban" id="kanban-board"></div>
+      </div>
+
+      <!-- ── SETTINGS ── -->
+      <div class="section" id="sec-settings">
+        <div class="page-title">Configurações</div>
+        <div class="page-sub">Preferências de conta e sistema.</div>
+        <div class="card">
+          <div class="profile-header">
+            <div class="profile-avatar" id="settings-avatar">A</div>
+            <div class="profile-info">
+              <h2 id="settings-name">Alex Rafa</h2>
+              <p id="settings-email">alex.rafa</p>
+            </div>
+          </div>
+          <div class="settings-group">
+            <div class="settings-group-title">Perfil</div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Nome completo</label>
+                <input class="form-control" id="cfg-name" placeholder="Seu nome">
+              </div>
+              <div class="form-group">
+                <label class="form-label">E-mail</label>
+                <input class="form-control" id="cfg-email" placeholder="email@exemplo.com">
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Empresa</label>
+              <input class="form-control" id="cfg-company" placeholder="Nome da empresa">
+            </div>
+            <button class="btn btn-gold" onclick="saveSettings()">Salvar Alterações</button>
+          </div>
+          <div class="settings-group">
+            <div class="settings-group-title">Notificações</div>
+            <div class="settings-row">
+              <div>
+                <div class="settings-label">Alertas críticos</div>
+                <div class="settings-sub">Documentos e prazos urgentes</div>
+              </div>
+              <div class="toggle on" onclick="this.classList.toggle('on')"></div>
+            </div>
+            <div class="settings-row">
+              <div>
+                <div class="settings-label">E-mail de resumo</div>
+                <div class="settings-sub">Resumo semanal de atividades</div>
+              </div>
+              <div class="toggle on" onclick="this.classList.toggle('on')"></div>
+            </div>
+            <div class="settings-row">
+              <div>
+                <div class="settings-label">Novos documentos</div>
+                <div class="settings-sub">Quando documentos são adicionados</div>
+              </div>
+              <div class="toggle" onclick="this.classList.toggle('on')"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── REPORTS ── -->
+      <div class="section" id="sec-reports">
+        <div class="page-title">Relatórios & Analytics</div>
+        <div class="page-sub">Visão geral de performance e dados.</div>
+        <div id="reports-content"></div>
+      </div>
+
+    </div><!-- /content -->
+  </div><!-- /main-area -->
+</div><!-- /page-app -->
+
+
+<!-- ══════════════════════════════
+     MODALS
+══════════════════════════════ -->
+
+<!-- Add Client -->
+<div class="modal-overlay" id="modal-add-client">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Novo Cliente</div>
+      <button class="modal-close" onclick="closeModal('modal-add-client')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Nome *</label>
+          <input class="form-control" id="cl-name" placeholder="Nome completo">
+          <div class="form-error" id="cl-name-err">Campo obrigatório</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Empresa *</label>
+          <input class="form-control" id="cl-company" placeholder="Nome da empresa">
+          <div class="form-error" id="cl-company-err">Campo obrigatório</div>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">E-mail *</label>
+        <input class="form-control" id="cl-email" type="email" placeholder="email@empresa.com">
+        <div class="form-error" id="cl-email-err">E-mail inválido</div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Telefone</label>
+          <input class="form-control" id="cl-phone" placeholder="(11) 99999-9999">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Status</label>
+          <select class="form-control" id="cl-status">
+            <option value="Ativo">Ativo</option>
+            <option value="Inativo">Inativo</option>
+            <option value="Prospect">Prospect</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Observações</label>
+        <textarea class="form-control" id="cl-notes" rows="3" placeholder="Informações adicionais…"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-add-client')">Cancelar</button>
+      <button class="btn btn-gold" onclick="saveClient()">Salvar Cliente</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Client -->
+<div class="modal-overlay" id="modal-edit-client">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Editar Cliente</div>
+      <button class="modal-close" onclick="closeModal('modal-edit-client')">×</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="edit-cl-id">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Nome *</label>
+          <input class="form-control" id="edit-cl-name">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Empresa</label>
+          <input class="form-control" id="edit-cl-company">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">E-mail</label>
+        <input class="form-control" id="edit-cl-email" type="email">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Telefone</label>
+          <input class="form-control" id="edit-cl-phone">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Status</label>
+          <select class="form-control" id="edit-cl-status">
+            <option value="Ativo">Ativo</option>
+            <option value="Inativo">Inativo</option>
+            <option value="Prospect">Prospect</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Observações</label>
+        <textarea class="form-control" id="edit-cl-notes" rows="3"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-danger btn-sm" onclick="deleteClient()">Excluir</button>
+      <button class="btn btn-outline" onclick="closeModal('modal-edit-client')">Cancelar</button>
+      <button class="btn btn-gold" onclick="updateClient()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Document -->
+<div class="modal-overlay" id="modal-add-doc">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Novo Documento</div>
+      <button class="modal-close" onclick="closeModal('modal-add-doc')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Nome do Documento *</label>
+        <input class="form-control" id="doc-name" placeholder="Ex: Contrato de Prestação de Serviços">
+        <div class="form-error" id="doc-name-err">Campo obrigatório</div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Tipo *</label>
+          <select class="form-control" id="doc-type">
+            <option value="Contrato">Contrato</option>
+            <option value="Relatório">Relatório</option>
+            <option value="Dossiê">Dossiê</option>
+            <option value="Proposta">Proposta</option>
+            <option value="NDA">NDA</option>
+            <option value="Outro">Outro</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Status</label>
+          <select class="form-control" id="doc-status">
+            <option value="Aguardando">Aguardando</option>
+            <option value="Em Revisão">Em Revisão</option>
+            <option value="Assinado">Assinado</option>
+            <option value="Arquivado">Arquivado</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Cliente Vinculado</label>
+        <select class="form-control" id="doc-client">
+          <option value="">— Nenhum —</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Arquivo (simulado)</label>
+        <div class="upload-btn" onclick="simulateUpload()">
+          <span id="upload-icon"></span>
+          <span>Clique para selecionar arquivo</span>
+          <div class="form-hint" id="upload-hint">Nenhum arquivo selecionado</div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-add-doc')">Cancelar</button>
+      <button class="btn btn-gold" onclick="saveDoc()">Salvar Documento</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Appointment -->
+<div class="modal-overlay" id="modal-add-appt">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Novo Agendamento</div>
+      <button class="modal-close" onclick="closeModal('modal-add-appt')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Título *</label>
+        <input class="form-control" id="appt-title" placeholder="Ex: Consultoria Estratégica">
+        <div class="form-error" id="appt-title-err">Campo obrigatório</div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Data *</label>
+          <input class="form-control" id="appt-date" type="date">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Horário</label>
+          <input class="form-control" id="appt-time" type="time" value="09:00">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Tipo</label>
+          <select class="form-control" id="appt-type">
+            <option value="Consultoria">Consultoria</option>
+            <option value="Reunião">Reunião</option>
+            <option value="Revisão">Revisão de Documentos</option>
+            <option value="Apresentação">Apresentação</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Cliente</label>
+          <select class="form-control" id="appt-client">
+            <option value="">— Nenhum —</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Notas</label>
+        <textarea class="form-control" id="appt-notes" rows="3" placeholder="Detalhes do agendamento…"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-add-appt')">Cancelar</button>
+      <button class="btn btn-gold" onclick="saveAppt()">Confirmar Agendamento</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Lead -->
+<div class="modal-overlay" id="modal-add-lead">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Novo Lead</div>
+      <button class="modal-close" onclick="closeModal('modal-add-lead')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Nome *</label>
+          <input class="form-control" id="lead-name" placeholder="Nome do lead">
+          <div class="form-error" id="lead-name-err">Campo obrigatório</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Empresa</label>
+          <input class="form-control" id="lead-company" placeholder="Empresa do lead">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">E-mail</label>
+          <input class="form-control" id="lead-email" type="email" placeholder="email@empresa.com">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Valor Estimado (R$)</label>
+          <input class="form-control" id="lead-value" type="number" placeholder="0,00">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Estágio</label>
+          <select class="form-control" id="lead-stage">
+            <option value="Prospecção">Prospecção</option>
+            <option value="Qualificação">Qualificação</option>
+            <option value="Proposta">Proposta</option>
+            <option value="Fechamento">Fechamento</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Prioridade</label>
+          <select class="form-control" id="lead-priority">
+            <option value="Normal">Normal</option>
+            <option value="Alta">Alta</option>
+            <option value="Urgente">Urgente</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-add-lead')">Cancelar</button>
+      <button class="btn btn-gold" onclick="saveLead()">Adicionar Lead</button>
+    </div>
+  </div>
+</div>
+
+<!-- View Document -->
+<div class="modal-overlay" id="modal-view-doc">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <div class="modal-title" id="vdoc-title">Visualizar Documento</div>
+      <button class="modal-close" onclick="closeModal('modal-view-doc')">×</button>
+    </div>
+    <div class="modal-body" id="vdoc-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-danger btn-sm" id="vdoc-delete-btn">Excluir</button>
+      <button class="btn btn-outline" onclick="closeModal('modal-view-doc')">Fechar</button>
+      <button class="btn btn-gold" id="vdoc-status-btn">Mudar Status</button>
+    </div>
+  </div>
+</div>
+
+<!-- View Appointment -->
+<div class="modal-overlay" id="modal-view-appt">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="vappt-title">Detalhes do Agendamento</div>
+      <button class="modal-close" onclick="closeModal('modal-view-appt')">×</button>
+    </div>
+    <div class="modal-body" id="vappt-body"></div>
+    <div class="modal-footer" id="vappt-footer"></div>
+  </div>
+</div>
+
+<!-- View Lead -->
+<div class="modal-overlay" id="modal-view-lead">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="vlead-title">Detalhes do Lead</div>
+      <button class="modal-close" onclick="closeModal('modal-view-lead')">×</button>
+    </div>
+    <div class="modal-body" id="vlead-body"></div>
+    <div class="modal-footer" id="vlead-footer"></div>
+  </div>
+</div>
+
+<!-- ── JS ── -->
+<script src="app.js"></script>
+
+<!-- Inject search icons and topbar after DOM + app.js loaded -->
+<script>
+  // Search icons (injected after app.js defines ICONS)
+  document.getElementById('client-search-icon').innerHTML = ICONS.search;
+  document.getElementById('doc-search-icon').innerHTML    = ICONS.search;
+  document.getElementById('upload-icon').innerHTML        = ICONS.upload;
+  document.getElementById('topbar-bell').innerHTML        = ICONS.bell;
+  document.getElementById('topbar-user').innerHTML        = ICONS.user;
+  document.getElementById('logout-icon').innerHTML        = ICONS.logout;
+</script>
+
+</body>
+</html>
