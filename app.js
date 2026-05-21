@@ -88,10 +88,12 @@ function initDB() {
   }
   if (!DB.get('leads')) {
     DB.set('leads', [
-      { id:'l1', name:'Gomes & Filhos Ltda', company:'Gomes & Filhos', email:'gomes@gfltda.com',     value:45000,  stage:'Qualificação', priority:'Alta',    createdAt:'2024-11-01' },
-      { id:'l2', name:'TechNova Inc',        company:'TechNova',       email:'contact@technova.io',  value:120000, stage:'Proposta',     priority:'Normal',  createdAt:'2024-10-28' },
-      { id:'l3', name:'Construtora Vega',    company:'Vega Const.',    email:'adm@vega.com',         value:85000,  stage:'Prospecção',   priority:'Normal',  createdAt:'2024-11-02' },
-      { id:'l4', name:'HealthCorp Brasil',   company:'HealthCorp',     email:'ti@healthcorp.com',    value:200000, stage:'Fechamento',   priority:'Urgente', createdAt:'2024-10-25' }
+      { id:'l1', name:'Ana Beatriz Souza',  phone:'(11) 98765-1234', email:'ana.souza@gmail.com',    procedure:'Rinoplastia',              doctor:'Dr. Rafael Menezes',  value:14800, stage:'Consulta Agendada',   priority:'Normal',  origin:'Instagram', notes:'Queixa estética no dorso nasal.', createdAt:'2024-11-01' },
+      { id:'l2', name:'Carla Mendonça',     phone:'(21) 99123-5678', email:'carla.m@outlook.com',    procedure:'Mamoplastia de Aumento',   doctor:'Dra. Priscila Alves', value:22000, stage:'Avaliação Médica',    priority:'Alta',    origin:'Indicação', notes:'Indicação de paciente operada há 2 anos.', createdAt:'2024-10-28' },
+      { id:'l3', name:'Fernanda Lima',      phone:'(11) 97654-9012', email:'fernanda.lima@uol.com',  procedure:'Lipoaspiração',            doctor:'Dr. Rafael Menezes',  value:18500, stage:'Orçamento Enviado',   priority:'Normal',  origin:'Google Ads', notes:'Abdome e flancos.', createdAt:'2024-11-02' },
+      { id:'l4', name:'Juliana Rocha',      phone:'(31) 98888-3456', email:'jurocha@gmail.com',      procedure:'Blefaroplastia',           doctor:'Dra. Priscila Alves', value:9800,  stage:'Cirurgia Confirmada', priority:'Urgente', origin:'Site', notes:'Data cirúrgica pré-aprovada para novembro.', createdAt:'2024-10-25' },
+      { id:'l5', name:'Marcos Tavares',     phone:'(11) 91234-7890', email:'mtavares@hotmail.com',   procedure:'Ginecomastia',             doctor:'Dr. Rafael Menezes',  value:12000, stage:'Primeiro Contato',    priority:'Normal',  origin:'WhatsApp', notes:'Aguardando retorno do paciente.', createdAt:'2024-11-03' },
+      { id:'l6', name:'Patrícia Nunes',     phone:'(85) 99876-5432', email:'p.nunes@gmail.com',      procedure:'Abdominoplastia',          doctor:'Dra. Priscila Alves', value:21000, stage:'Avaliação Médica',    priority:'Alta',    origin:'Indicação', notes:'Candidata a abdominoplastia completa pós-gestacional.', createdAt:'2024-11-01' }
     ]);
   }
   if (!DB.get('notifications')) {
@@ -99,7 +101,7 @@ function initDB() {
       { id:'n1', title:'Novo documento disponível',                body:'Seu contrato foi assinado e está no Vault.',                              time:'2 horas',  read:false, userId:'u2' },
       { id:'n2', title:'Alteração de horário',                     body:'A reunião de amanhã foi movida para as 15h.',                             time:'Ontem',    read:false, userId:'u2' },
       { id:'n3', title:'Vencimento de Documentação — Maritex SA',  body:'O alvará de funcionamento expira em 48 horas. Ação imediata requerida.', time:'1 hora',   read:false, userId:'u1' },
-      { id:'n4', title:'Novo Lead de Alta Prioridade',             body:'Gomes & Filhos Ltda demonstrou interesse no módulo Enterprise.',         time:'3 horas',  read:false, userId:'u1' },
+      { id:'n4', title:'Novo Paciente Lead — Alta Prioridade',     body:'Carla Mendonça foi indicada e demonstrou interesse em mamoplastia.',      time:'3 horas',  read:false, userId:'u1' },
       { id:'n5', title:'Documento assinado',                       body:'Contrato 2024 foi assinado pelo cliente João Silva.',                    time:'1 dia',    read:true,  userId:'u1' }
     ]);
   }
@@ -168,6 +170,7 @@ function enterApp() {
   renderSidebar();
   navigate(currentUser.role === 'admin' ? 'dashboard' : 'dashboard-client');
   updateNotifDot();
+  renderBottomNav();
 }
 
 function renderSidebar() {
@@ -243,8 +246,8 @@ function docIcon(ext) {
   return `<div class="doc-icon doc-icon-doc" style="color:#4a6cf7">${ICONS.fileSpreadsheet}</div>`;
 }
 const MONTHS = ['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'];
-const STAGES = ['Prospecção','Qualificação','Proposta','Fechamento'];
-const STAGE_COLORS = { 'Prospecção':'tag-gray','Qualificação':'tag-gold','Proposta':'tag-orange','Fechamento':'tag-green' };
+const STAGES = ['Primeiro Contato','Consulta Agendada','Avaliação Médica','Orçamento Enviado','Cirurgia Confirmada'];
+const STAGE_COLORS = { 'Primeiro Contato':'tag-gray','Consulta Agendada':'tag-gold','Avaliação Médica':'tag-orange','Orçamento Enviado':'tag-gold','Cirurgia Confirmada':'tag-green' };
 const PRIORITY_CLASS = { 'Urgente':'tag-red','Alta':'tag-orange','Normal':'tag-gray' };
 
 function showErr(id) { const el = document.getElementById(id); if (el) el.style.display = 'block'; }
@@ -368,8 +371,8 @@ function renderAdminDash() {
           ${(DB.get('leads') || []).slice(0,3).map(l => `
             <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--cream-dark)">
               <div class="client-row-avatar">${l.name[0]}</div>
-              <div style="flex:1"><div style="font-size:13px;font-weight:600">${l.name}</div><div style="font-size:11px;color:var(--text-light)">${l.email}</div></div>
-              <span class="tag tag-gold">${l.stage}</span>
+              <div style="flex:1"><div style="font-size:13px;font-weight:600">${l.name}</div><div style="font-size:11px;color:var(--text-light)">${l.procedure||l.email}</div></div>
+              <span class="tag ${STAGE_COLORS[l.stage]||'tag-gold'}" style="font-size:10px">${l.stage}</span>
             </div>
           `).join('')}
           <div style="margin-top:12px">
@@ -826,7 +829,8 @@ function renderLeads() {
         ${stageLeads.map(l => `
           <div class="kanban-card" onclick="viewLead('${l.id}')">
             <div class="kanban-card-title">${l.name}</div>
-            <div class="kanban-card-sub">${l.company || l.email}</div>
+            <div class="kanban-card-sub" style="font-weight:500;color:var(--gold-light)">${l.procedure || '—'}</div>
+            <div class="kanban-card-sub">${l.doctor || ''}</div>
             <div class="kanban-card-footer">
               <span class="tag ${PRIORITY_CLASS[l.priority]||'tag-gray'}">${l.priority}</span>
               <span style="font-size:12px;font-weight:600;color:var(--gold)">R$ ${Number(l.value||0).toLocaleString('pt-BR')}</span>
@@ -843,17 +847,31 @@ function viewLead(id) {
   if (!l) return;
   document.getElementById('vlead-title').textContent = l.name;
   document.getElementById('vlead-body').innerHTML = `
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
-      <div><div class="form-label">Empresa</div><div style="font-size:14px;font-weight:600">${l.company||'—'}</div></div>
-      <div><div class="form-label">E-mail</div><div style="font-size:14px">${l.email||'—'}</div></div>
-      <div><div class="form-label">Valor Estimado</div><div style="font-size:20px;font-weight:700;color:var(--gold)">R$ ${Number(l.value||0).toLocaleString('pt-BR')}</div></div>
-      <div><div class="form-label">Prioridade</div><span class="tag ${PRIORITY_CLASS[l.priority]||'tag-gray'}">${l.priority}</span></div>
-      <div><div class="form-label">Estágio Atual</div><span class="tag ${STAGE_COLORS[l.stage]}">${l.stage}</span></div>
+    <div style="background:var(--gold-pale);border-radius:var(--radius-sm);padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+      <div>
+        <div style="font-size:11px;color:var(--brown-mid);font-weight:700;text-transform:uppercase;letter-spacing:.6px">Procedimento</div>
+        <div style="font-size:18px;font-weight:700;color:var(--brown)">${l.procedure||'—'}</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:11px;color:var(--brown-mid);font-weight:700;text-transform:uppercase;letter-spacing:.6px">Orçamento</div>
+        <div style="font-size:22px;font-weight:700;color:var(--gold)">R$ ${Number(l.value||0).toLocaleString('pt-BR')}</div>
+      </div>
     </div>
-    <div style="margin-top:20px">
-      <div class="form-label">Mover para estágio</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
+      <div><div class="form-label">Paciente</div><div style="font-size:14px;font-weight:600">${l.name}</div></div>
+      <div><div class="form-label">Telefone</div><div style="font-size:14px">${l.phone||'—'}</div></div>
+      <div><div class="form-label">E-mail</div><div style="font-size:14px">${l.email||'—'}</div></div>
+      <div><div class="form-label">Médico Responsável</div><div style="font-size:14px;font-weight:600">${l.doctor||'—'}</div></div>
+      <div><div class="form-label">Origem do Lead</div><span class="tag tag-gold">${l.origin||'—'}</span></div>
+      <div><div class="form-label">Prioridade</div><span class="tag ${PRIORITY_CLASS[l.priority]||'tag-gray'}">${l.priority}</span></div>
+      <div><div class="form-label">Etapa do Funil</div><span class="tag ${STAGE_COLORS[l.stage]||'tag-gray'}">${l.stage}</span></div>
+      <div><div class="form-label">Data do Cadastro</div><div style="font-size:14px">${l.createdAt||'—'}</div></div>
+    </div>
+    ${l.notes ? '<div style="background:var(--cream);border-radius:var(--radius-sm);padding:13px 14px;font-size:13px;color:var(--text-mid)"><div class="form-label" style="margin-bottom:5px">Observações Clínicas</div>' + l.notes + '</div>' : ''}
+    <div style="margin-top:18px">
+      <div class="form-label">Avançar no Funil</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
-        ${STAGES.filter(s => s !== l.stage).map(s => `<button class="btn btn-outline btn-sm" onclick="moveLeadStage('${l.id}','${s}')">${s}</button>`).join('')}
+        ${STAGES.filter(s => s !== l.stage).map(s => '<button class="btn btn-outline btn-sm" onclick="moveLeadStage(' + "'" + l.id + "'" + ',' + "'" + s + "'" + ')">' + s + '</button>').join('')}
       </div>
     </div>
   `;
@@ -872,7 +890,7 @@ function moveLeadStage(id, stage) {
   DB.set('leads', leads);
   closeModal('modal-view-lead');
   renderLeads();
-  toast(`Lead movido para ${stage}!`, 'success');
+  toast('Paciente movido para ' + stage + '!', 'success');
 }
 
 function convertLead(id) {
@@ -880,12 +898,12 @@ function convertLead(id) {
   const l = leads.find(x => x.id === id);
   if (!l) return;
   const clients = DB.get('clients') || [];
-  clients.push({ id:'c'+Date.now(), name:l.name, company:l.company||'', email:l.email||'', phone:'', status:'Ativo', notes:`Convertido de lead. Valor: R$ ${Number(l.value||0).toLocaleString('pt-BR')}`, linkedUserId:null });
+  clients.push({ id:'c'+Date.now(), name:l.name, company:l.company||'', email:l.email||'', phone:'', status:'Ativo', notes:`Paciente cirúrgico — Procedimento: ${l.procedure||'—'}. Orçamento: R$ ${Number(l.value||0).toLocaleString('pt-BR')}. Médico: ${l.doctor||'—'}. Origem: ${l.origin||'—'}.`, linkedUserId:null });
   DB.set('clients', clients);
   DB.set('leads', leads.filter(x => x.id !== id));
   closeModal('modal-view-lead');
   renderLeads();
-  addNotif('u1', 'Lead convertido', `${l.name} foi convertido em cliente.`);
+  addNotif('u1', 'Paciente confirmado', `${l.name} — ${l.procedure||'procedimento'} foi confirmado.`);
   toast(`${l.name} convertido em cliente!`, 'success');
 }
 
@@ -902,13 +920,25 @@ function saveLead() {
   hideErr('lead-name-err'); document.getElementById('lead-name').classList.remove('error');
 
   const leads = DB.get('leads') || [];
-  leads.push({ id:'l'+Date.now(), name, company:document.getElementById('lead-company').value, email:document.getElementById('lead-email').value, value:document.getElementById('lead-value').value||0, stage:document.getElementById('lead-stage').value, priority:document.getElementById('lead-priority').value, createdAt:new Date().toISOString().slice(0,10) });
+  leads.push({
+    id: 'l'+Date.now(), name,
+    phone:     document.getElementById('lead-phone').value,
+    email:     document.getElementById('lead-email').value,
+    procedure: document.getElementById('lead-procedure').value,
+    doctor:    document.getElementById('lead-doctor').value,
+    value:     document.getElementById('lead-value').value || 0,
+    origin:    document.getElementById('lead-origin').value,
+    stage:     document.getElementById('lead-stage').value,
+    priority:  document.getElementById('lead-priority').value,
+    notes:     document.getElementById('lead-notes-field').value,
+    createdAt: new Date().toISOString().slice(0,10)
+  });
   DB.set('leads', leads);
-  ['lead-name','lead-company','lead-email','lead-value'].forEach(id => document.getElementById(id).value = '');
+  ['lead-name','lead-phone','lead-email','lead-value','lead-notes-field'].forEach(id => document.getElementById(id).value = '');
   closeModal('modal-add-lead');
   renderLeads();
   if (currentSection === 'dashboard') renderAdminDash();
-  toast('Lead adicionado!', 'success');
+  toast('Paciente lead cadastrado!', 'success');
 }
 
 /* ──────────────────────────────
@@ -932,7 +962,7 @@ function renderReports() {
     <div class="grid-4" style="margin-bottom:20px">
       <div class="stat-card"><div class="stat-value">${clients.length}</div><div class="stat-label">Clientes Totais</div></div>
       <div class="stat-card"><div class="stat-value">${docs.length}</div><div class="stat-label">Documentos</div></div>
-      <div class="stat-card accent"><div class="stat-value">R$ ${(totalLeadValue/1000).toFixed(0)}K</div><div class="stat-label">Pipeline Total</div></div>
+      <div class="stat-card accent"><div class="stat-value">R$ ${(totalLeadValue/1000).toFixed(0)}K</div><div class="stat-label">Pipeline Cirúrgico</div></div>
       <div class="stat-card"><div class="stat-value">${appts.length}</div><div class="stat-label">Agendamentos</div></div>
     </div>
     <div class="grid-2">
@@ -970,7 +1000,7 @@ function renderReports() {
             <span class="tag ${STAGE_COLORS[s]}">${s}</span>
             <div style="text-align:right">
               <div style="font-size:14px;font-weight:600;color:var(--gold)">R$ ${total.toLocaleString('pt-BR')}</div>
-              <div style="font-size:11px;color:var(--text-light)">${sLeads.length} lead(s)</div>
+              <div style="font-size:11px;color:var(--text-light)">${sLeads.length} paciente(s)</div>
             </div>
           </div>`;
         }).join('')}
@@ -1022,6 +1052,90 @@ function saveSettings() {
 document.querySelectorAll('.modal-overlay').forEach(o => {
   o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); });
 });
+
+/* ──────────────────────────────
+   MOBILE SIDEBAR TOGGLE
+────────────────────────────── */
+function openSidebar() {
+  document.getElementById('sidebar').classList.add('open');
+  document.getElementById('sidebar-overlay').classList.add('visible');
+  document.body.style.overflow = 'hidden'; // prevent background scroll
+}
+
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebar-overlay').classList.remove('visible');
+  document.body.style.overflow = '';
+}
+
+// Auto-close sidebar on nav tap (mobile)
+function navigateAndClose(section) {
+  closeSidebar();
+  navigate(section);
+}
+
+/* ──────────────────────────────
+   BOTTOM NAV (mobile)
+   Items: dashboard, documents, appointments, notifications, more(sidebar)
+────────────────────────────── */
+const BOTTOM_NAV_ADMIN = [
+  { id:'dashboard',     icon:'dashboard',     label:'Início'    },
+  { id:'clients',       icon:'clients',       label:'Clientes'  },
+  { id:'leads',         icon:'leads',         label:'Leads'     },
+  { id:'notifications', icon:'notifications', label:'Alertas', badge:true },
+  { id:'__menu',        icon:'settings',      label:'Mais'      },
+];
+const BOTTOM_NAV_CLIENT = [
+  { id:'dashboard-client', icon:'dashboard',     label:'Início'    },
+  { id:'documents',        icon:'documents',     label:'Docs'      },
+  { id:'appointments',     icon:'appointments',  label:'Agenda'    },
+  { id:'notifications',    icon:'notifications', label:'Alertas', badge:true },
+  { id:'__menu',           icon:'settings',      label:'Mais'      },
+];
+
+function renderBottomNav() {
+  const nav = document.getElementById('bottom-nav');
+  if (!nav) return;
+  const items = currentUser.role === 'admin' ? BOTTOM_NAV_ADMIN : BOTTOM_NAV_CLIENT;
+  const unread = (DB.get('notifications') || []).filter(n => n.userId === currentUser.id && !n.read).length;
+
+  nav.innerHTML = `<div class="bottom-nav-inner">${items.map(it => {
+    const isActive = it.id === currentSection || (it.id === '__menu' && false);
+    const badge = it.badge && unread
+      ? `<span class="bottom-nav-badge">${unread > 9 ? '9+' : unread}</span>`
+      : '';
+    return `<div class="bottom-nav-item ${isActive ? 'active' : ''}" style="position:relative"
+      onclick="${it.id === '__menu' ? 'openSidebar()' : `navigate('${it.id}')`}">
+      ${(ICONS[it.icon]||'').replace('width="18"','width="22"').replace('height="18"','height="22"')}
+      ${badge}
+      <span>${it.label}</span>
+    </div>`;
+  }).join('')}</div>`;
+}
+
+function updateBottomNav() {
+  renderBottomNav();
+}
+
+/* ──────────────────────────────
+   PATCH navigate() to also update bottom nav & close sidebar on mobile
+────────────────────────────── */
+const _origNavigate = navigate;
+// We redefine navigate to wrap the original
+window.navigate = function(section) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  const sec = document.getElementById('sec-' + section);
+  if (sec) sec.classList.add('active');
+  const nav = document.getElementById('nav-' + section);
+  if (nav) nav.classList.add('active');
+  currentSection = section;
+  renderSection(section);
+  // mobile: close sidebar after nav
+  if (window.innerWidth <= 768) closeSidebar();
+  // update bottom nav active state
+  renderBottomNav();
+};
 
 /* ──────────────────────────────
    INIT
