@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RafaLink CRM - Login</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="login-wrap">
+    <form class="login-card" id="loginForm">
+      <h1>RafaLink CRM</h1>
+      <p class="sub">Inteligência em Relacionamentos, Vendas e Marketing</p>
+
+      <label for="email">E-mail</label>
+      <input id="email" type="email" required autocomplete="username" />
+
+      <label for="password">Senha</label>
+      <input id="password" type="password" required autocomplete="current-password" />
+
+      <button class="primary" type="submit">Entrar</button>
+      <div class="error" id="error"></div>
+
+      <div class="demo">
+        <p>Usuários de demonstração (clique para preencher):</p>
+        <button type="button" data-e="admin@rafalink.com" data-p="admin123">Admin: admin@rafalink.com</button>
+        <button type="button" data-e="gerente@rafalink.com" data-p="gerente123">Gerente: gerente@rafalink.com</button>
+        <button type="button" data-e="vendedor@rafalink.com" data-p="vendedor123">Vendedor: vendedor@rafalink.com</button>
+      </div>
+    </form>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script>
+    if (getToken()) location.href = "app.html";
+
+    const form = document.getElementById("loginForm");
+    const errorBox = document.getElementById("error");
+
+    document.querySelectorAll(".demo button").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        document.getElementById("email").value = btn.dataset.e;
+        document.getElementById("password").value = btn.dataset.p;
+      });
+    });
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      errorBox.textContent = "";
+      try {
+        const data = await api("/auth/login", {
+          method: "POST",
+          body: {
+            email: document.getElementById("email").value,
+            password: document.getElementById("password").value,
+          },
+        });
+        saveSession(data.accessToken, data.user);
+        location.href = "app.html";
+      } catch (err) {
+        errorBox.textContent = err.message;
+      }
+    });
+  </script>
+</body>
+</html>

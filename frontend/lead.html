@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RafaLink CRM - Lead</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="app"></div>
+
+  <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/lead-form.js"></script>
+  <script>
+    const ACTION = {
+      EM_CONTATO: { label: "Iniciar contato", cls: "btn-primary" },
+      QUALIFICADO: { label: "Qualificar", cls: "btn-primary" },
+      OPORTUNIDADE: { label: "Virar oportunidade", cls: "btn-primary" },
+      CONVERTIDO: { label: "Converter", cls: "btn-primary" },
+      PERDIDO: { label: "Marcar como perdido", cls: "btn-danger" },
+      ARQUIVADO: { label: "Arquivar", cls: "" },
+      NOVO: { label: "Reabrir como novo", cls: "" },
+    };
+    const ACTION_ORDER = ["EM_CONTATO", "QUALIFICADO", "OPORTUNIDADE", "CONVERTIDO", "PERDIDO", "ARQUIVADO", "NOVO"];
+    const FLOW = ["NOVO", "EM_CONTATO", "QUALIFICADO", "OPORTUNIDADE", "CONVERTIDO"];
+
+    const leadId = new URLSearchParams(location.search).get("id");
+    const content = renderLayout("leads", "Detalhe do lead");
+
+    async function load() {
+      try {
+        render(await api("/leads/" + leadId));
+      } catch (err) {
+        content.innerHTML = `<p class="bad">${esc(err.message)}</p><p><a href="leads.html">← Voltar para leads</a></p>`;
+      }
+    }
+
+    function render(lead) {
+      const idx = FLOW.indexOf(lead.status);
+      const stepper = idx >= 0
+        ? `<div class="stepper">${FLOW.map((s, i) =>
+            `<span class="step ${i < idx ? "done" : i === idx ? "current" : ""}">${STATUS_LABEL[s]}</span>`).join("")}</div>`
+        : `<div class="stepper">${statusBadge(lead.status)}
+             ${lead.lostReason ? `<span class="muted">Motivo: ${esc(lead.lostReason)}</span>` : ""}</div>`;
+
+      const actions = ACTION_ORDER
+        .filter((s) => lead.allowedActions.includes(s))
+        .map((s) => `<button class="btn ${ACTION[s].cls}" data-status="${s}">${ACTION[s].label}</button>`)
+        .join("");
+      const editBtn = lead.status !== "CONVERTIDO" ? `<button class="btn" id="editBtn">Editar</button>` : "";
+
+      const field = (label, value) =>
+        `<div class="card"><div class="label">${label}</div><div class="value sm">${esc(value || "—")}</div></div>`;
+
+      content.innerHTML = `
+        <p><a href="leads.html" class="muted">← Voltar para leads</a></p>
+        <div class="page-head">
+          <div><h2>${esc(lead.name)}</h2><div class="muted">${esc(lead.company || "Sem empresa")}</div></div>
+          ${statusBadge(lead.status)}
+        </div>
+        ${stepper}
+        <div class="actions">${actions}${editBtn}</div>
+        <div class="detail-grid">
+          ${field("E-mail", lead.email)}
+          ${field("Telefone", lead.phone)}
+          ${field("Origem", lead.source)}
+          ${field("Canal", CHANNEL_LABEL[lead.channel])}
+          ${field("Responsável", lead.ownerName)}
+          ${field("Score", lead.score + "/100")}
+          ${field("Próxima ação", lead.nextAction)}
+          ${field("Última interação", fmtDateTime(lead.lastInteractionAt))}
+          ${field("Criado em", fmtDateTime(lead.createdAt))}
+        </div>`;
+
+      content.querySelectorAll("[data-status]").forEach((btn) =>
+        btn.addEventListener("click", () => changeStatus(btn.dataset.status))
+      );
+      const edit = document.getElementById("editBtn");
+      if (edit) edit.addEventListener("click", async () => {
+        const opts = await api("/leads/options");
+        openLeadForm({ lead, owners: opts.owners, onSaved: render });
+      });
+    }
+
+    async function changeStatus(status) {
+      let reason = null;
+      if (status === "PERDIDO") {
+        reason = prompt("Motivo da perda (opcional):");
+        if (reason === null) return;
+      } else if (status === "CONVERTIDO" && !confirm("Converter este lead? Depois disso ele não poderá mais ser editado.")) {
+        return;
+      } else if (status === "ARQUIVADO" && !confirm("Arquivar este lead?")) {
+        return;
+      }
+      try {
+        const lead = await api(`/leads/${leadId}/status`, {
+          method: "POST",
+          body: { status, reason: reason || null },
+        });
+        toast("Status atualizado");
+        render(lead);
+      } catch (err) {
+        toast(err.message, "err");
+      }
+    }
+
+    load();
+  </script>
+</body>
+</html>

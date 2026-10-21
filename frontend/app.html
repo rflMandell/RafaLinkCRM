@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RafaLink CRM</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="app"></div>
+
+  <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
+  <script>
+    (async () => {
+      const content = renderLayout("dashboard", "Dashboard");
+      const me = getUser();
+      content.innerHTML = `
+        <h2>Bem-vindo, ${esc(me.name.split(" ")[0])}</h2>
+        <div class="cards" id="cards"></div>`;
+
+      const card = (label, value, cls = "") =>
+        `<div class="card"><div class="label">${label}</div><div class="value ${cls}">${esc(value)}</div></div>`;
+
+      try {
+        const [health, total, novos, qualificados] = await Promise.all([
+          api("/health"),
+          api("/leads?size=1"),
+          api("/leads?size=1&status=NOVO"),
+          api("/leads?size=1&status=QUALIFICADO"),
+        ]);
+        document.getElementById("cards").innerHTML =
+          card("Status da API", health.status, "ok") +
+          card("Seu papel (RBAC)", me.role) +
+          card("Total de leads", total.totalElements) +
+          card("Leads novos", novos.totalElements) +
+          card("Leads qualificados", qualificados.totalElements);
+      } catch (err) {
+        document.getElementById("cards").innerHTML = card("Status da API", "OFFLINE", "bad");
+      }
+    })();
+  </script>
+</body>
+</html>

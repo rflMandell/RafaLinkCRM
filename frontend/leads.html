@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RafaLink CRM - Leads</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="app"></div>
+
+  <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/lead-form.js"></script>
+  <script>
+    const state = { page: 0, size: 10, q: "", status: "", owner: "", channel: "", sort: "createdAt,desc" };
+    let options = { statuses: [], channels: [], owners: [] };
+
+    async function init() {
+      const content = renderLayout("leads", "Leads");
+      content.innerHTML = `
+        <div class="page-head">
+          <h2>Leads</h2>
+          <button class="btn btn-primary" id="newBtn">+ Novo lead</button>
+        </div>
+        <div class="toolbar">
+          <input id="fq" placeholder="Buscar por nome, e-mail ou empresa" />
+          <select id="fstatus"><option value="">Todos os status</option></select>
+          <select id="fchannel"><option value="">Todos os canais</option></select>
+          <select id="fowner"><option value="">Todos os responsáveis</option></select>
+          <select id="fsort">
+            <option value="createdAt,desc">Mais recentes</option>
+            <option value="createdAt,asc">Mais antigos</option>
+            <option value="score,desc">Maior score</option>
+            <option value="name,asc">Nome (A-Z)</option>
+          </select>
+        </div>
+        <div id="tableBox"></div>
+        <div class="pager" id="pager"></div>`;
+
+      try {
+        options = await api("/leads/options");
+      } catch (err) {
+        toast(err.message, "err");
+        return;
+      }
+
+      const fill = (id, items) => {
+        document.getElementById(id).insertAdjacentHTML(
+          "beforeend",
+          items.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join("")
+        );
+      };
+      fill("fstatus", options.statuses.map((s) => [s, STATUS_LABEL[s]]));
+      fill("fchannel", options.channels.map((c) => [c, CHANNEL_LABEL[c]]));
+      fill("fowner", options.owners.map((o) => [o.id, o.name]));
+
+      const bind = (id, key) =>
+        document.getElementById(id).addEventListener("change", (e) => {
+          state[key] = e.target.value;
+          state.page = 0;
+          load();
+        });
+      bind("fstatus", "status");
+      bind("fchannel", "channel");
+      bind("fowner", "owner");
+      bind("fsort", "sort");
+
+      let timer;
+      document.getElementById("fq").addEventListener("input", (e) => {
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+          state.q = e.target.value.trim();
+          state.page = 0;
+          load();
+        }, 300);
+      });
+
+      document.getElementById("newBtn").addEventListener("click", () =>
+        openLeadForm({ owners: options.owners, onSaved: () => { state.page = 0; load(); } })
+      );
+
+      document.getElementById("tableBox").addEventListener("click", (e) => {
+        const row = e.target.closest("tr[data-id]");
+        if (row) location.href = "lead.html?id=" + row.dataset.id;
+      });
+
+      load();
+    }
+
+    async function load() {
+      const params = new URLSearchParams({ page: state.page, size: state.size, sort: state.sort });
+      for (const k of ["q", "status", "owner", "channel"]) {
+        if (state[k]) params.set(k, state[k]);
+      }
+      try {
+        renderTable(await api("/leads?" + params.toString()));
+      } catch (err) {
+        toast(err.message, "err");
+      }
+    }
+
+    function renderTable(data) {
+      const box = document.getElementById("tableBox");
+      if (data.content.length === 0) {
+        box.innerHTML = `<div class="empty">Nenhum lead encontrado.</div>`;
+      } else {
+        box.innerHTML = `
+          <table class="grid">
+            <thead><tr>
+              <th>Lead</th><th>Origem / Canal</th><th>Responsável</th>
+              <th>Score</th><th>Status</th><th>Criado em</th><th>Próxima ação</th>
+            </tr></thead>
+            <tbody>
+              ${data.content.map((l) => `
+                <tr class="clickable" data-id="${l.id}">
+                  <td><strong>${esc(l.name)}</strong><div class="muted">${esc(l.company || "—")}</div></td>
+                  <td>${esc(l.source || "—")}<div class="muted">${esc(CHANNEL_LABEL[l.channel] || "—")}</div></td>
+                  <td>${esc(l.ownerName || "—")}</td>
+                  <td class="score">${l.score}</td>
+                  <td>${statusBadge(l.status)}</td>
+                  <td>${fmtDate(l.createdAt)}</td>
+                  <td>${esc(l.nextAction || "—")}</td>
+                </tr>`).join("")}
+            </tbody>
+          </table>`;
+      }
+
+      const pages = Math.max(data.totalPages, 1);
+      document.getElementById("pager").innerHTML = `
+        <span>Página ${data.page + 1} de ${pages} · ${data.totalElements} leads</span>
+        <div>
+          <button class="btn" id="prev" ${data.page === 0 ? "disabled" : ""}>Anterior</button>
+          <button class="btn" id="next" ${data.page + 1 >= pages ? "disabled" : ""}>Próxima</button>
+        </div>`;
+      document.getElementById("prev").addEventListener("click", () => { state.page--; load(); });
+      document.getElementById("next").addEventListener("click", () => { state.page++; load(); });
+    }
+
+    init();
+  </script>
+</body>
+</html>
