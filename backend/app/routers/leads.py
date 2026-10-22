@@ -8,6 +8,7 @@ from ..database import get_db, now_iso
 from ..errors import AppError
 from ..events import publish
 from ..security import get_current_user
+from ..services import check_owner as _check_owner, convert_lead
 
 router = APIRouter(prefix="/leads", tags=["Leads"])
 
@@ -58,7 +59,11 @@ FIELD_TO_COLUMN = {
 EMAIL_PATTERN = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
 
 SELECT_SQL = (
-    "SELECT l.*, u.name AS owner_name FROM leads l LEFT JOIN users u ON u.id = l.owner_id"
+    "SELECT l.*, u.name AS owner_name, c.name AS contact_name, co.name AS company_name "
+    "FROM leads l "
+    "LEFT JOIN users u ON u.id = l.owner_id "
+    "LEFT JOIN contacts c ON c.id = l.contact_id "
+    "LEFT JOIN companies co ON co.id = l.company_id"
 )
 
 
@@ -104,6 +109,10 @@ def to_dto(r) -> dict:
         "channel": r["channel"],
         "ownerId": r["owner_id"],
         "ownerName": r["owner_name"],
+        "contactId": r["contact_id"],
+        "contactName": r["contact_name"],
+        "companyId": r["company_id"],
+        "companyName": r["company_name"],
         "score": r["score"],
         "status": r["status"],
         "lostReason": r["lost_reason"],
@@ -125,17 +134,6 @@ def _get_lead(db, user, lead_id: int):
     return row
 
 
-def _check_owner(db, user, owner_id: int | None) -> None:
-    if owner_id is None:
-        return
-    ok = db.execute(
-        "SELECT 1 FROM users WHERE id = ? AND organization_id = ? AND active = 1",
-        (owner_id, user["organization_id"]),
-    ).fetchone()
-    if ok is None:
-        raise AppError(422, "OWNER_NOT_FOUND", "Responsável inválido.")
-
-
 def _change_status(db, user, lead_id: int, new_status: str, reason: str | None = None) -> dict:
     lead = _get_lead(db, user, lead_id)
     current = lead["status"]
@@ -150,6 +148,8 @@ def _change_status(db, user, lead_id: int, new_status: str, reason: str | None =
             "INVALID_LEAD_TRANSITION",
             f"Não é possível mover o lead de {current} para {new_status}.",
         )
+    if new_status == "CONVERTIDO":
+        convert_lead(db, user, lead)  # RN04: cria contato (e empresa) a partir do lead
 
     now = now_iso()
     db.execute(

@@ -92,6 +92,55 @@ MIGRATIONS = [
         );
         """,
     ),
+        (
+        "V5__create_companies",
+        """
+        CREATE TABLE companies (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            organization_id INTEGER NOT NULL REFERENCES organizations(id),
+            name TEXT NOT NULL,
+            industry TEXT,
+            website TEXT,
+            phone TEXT,
+            city TEXT,
+            notes TEXT,
+            type TEXT NOT NULL DEFAULT 'PROSPECT',
+            owner_id INTEGER REFERENCES users(id),
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX idx_companies_org_name ON companies(organization_id, name);
+        """,
+    ),
+    (
+        "V6__create_contacts",
+        """
+        CREATE TABLE contacts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            organization_id INTEGER NOT NULL REFERENCES organizations(id),
+            company_id INTEGER REFERENCES companies(id),
+            name TEXT NOT NULL,
+            job_title TEXT,
+            email TEXT,
+            phone TEXT,
+            owner_id INTEGER REFERENCES users(id),
+            status TEXT NOT NULL DEFAULT 'ATIVO',
+            contact_preference TEXT,
+            source_lead_id INTEGER REFERENCES leads(id),
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX idx_contacts_org_name ON contacts(organization_id, name);
+        CREATE INDEX idx_contacts_company ON contacts(company_id);
+        """,
+    ),
+    (
+        "V7__add_lead_conversion_links",
+        """
+        ALTER TABLE leads ADD COLUMN contact_id INTEGER REFERENCES contacts(id);
+        ALTER TABLE leads ADD COLUMN company_id INTEGER REFERENCES companies(id);
+        """,
+    ),
 ]
 
 

@@ -149,3 +149,19 @@ dialog.modal h2 { margin-bottom: 8px; }
 .actions { display: flex; gap: 10px; flex-wrap: wrap; margin: 16px 0; }
 .detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
 .card .value.sm { font-size: 1rem; font-weight: 600; }
+
+/* ---------- Componentes (Etapa 3) ---------- */
+textarea {
+  width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--bg); color: var(--text); font-size: 1rem; font-family: inherit; resize: vertical;
+}
+textarea:focus { outline: 2px solid var(--primary); border-color: transparent; }
+.link { color: #a5b4fc; text-decoration: none; }
+.link:hover { text-decoration: underline; }
+.section-title { margin: 28px 0 12px; font-size: 1.05rem; }
+.card.full { grid-column: 1 / -1; }
+
+.ty-PROSPECT { background: #1e3a8a; color: #bfdbfe; }
+.ty-CLIENTE { background: #14532d; color: #86efac; }
+.ct-ATIVO { background: #14532d; color: #86efac; }
+.ct-INATIVO { background: #334155; color: #cbd5e1; }

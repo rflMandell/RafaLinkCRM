@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RafaLink CRM - Empresas</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="app"></div>
+
+  <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/company-form.js"></script>
+  <script>
+    const state = { page: 0, size: 10, q: "", type: "", owner: "", sort: "name,asc" };
+    let options = { types: [], owners: [] };
+
+    async function init() {
+      const content = renderLayout("companies", "Empresas");
+      content.innerHTML = `
+        <div class="page-head">
+          <h2>Empresas</h2>
+          <button class="btn btn-primary" id="newBtn">+ Nova empresa</button>
+        </div>
+        <div class="toolbar">
+          <input id="fq" placeholder="Buscar por nome, segmento ou cidade" />
+          <select id="ftype"><option value="">Todos os tipos</option></select>
+          <select id="fowner"><option value="">Todos os responsáveis</option></select>
+          <select id="fsort">
+            <option value="name,asc">Nome (A-Z)</option>
+            <option value="createdAt,desc">Mais recentes</option>
+            <option value="contacts,desc">Mais contatos</option>
+          </select>
+        </div>
+        <div id="tableBox"></div>
+        <div class="pager" id="pager"></div>`;
+
+      try {
+        options = await api("/companies/options");
+      } catch (err) {
+        toast(err.message, "err");
+        return;
+      }
+      fillSelect("ftype", options.types.map((t) => [t, TYPE_LABEL[t]]));
+      fillSelect("fowner", options.owners.map((o) => [o.id, o.name]));
+
+      const bind = (id, key) =>
+        document.getElementById(id).addEventListener("change", (e) => {
+          state[key] = e.target.value;
+          state.page = 0;
+          load();
+        });
+      bind("ftype", "type");
+      bind("fowner", "owner");
+      bind("fsort", "sort");
+
+      document.getElementById("fq").addEventListener("input", debounce((e) => {
+        state.q = e.target.value.trim();
+        state.page = 0;
+        load();
+      }));
+
+      document.getElementById("newBtn").addEventListener("click", () =>
+        openCompanyForm({ owners: options.owners, onSaved: (c) => (location.href = "company.html?id=" + c.id) })
+      );
+
+      document.getElementById("tableBox").addEventListener("click", (e) => {
+        const row = e.target.closest("tr[data-id]");
+        if (row) location.href = "company.html?id=" + row.dataset.id;
+      });
+
+      load();
+    }
+
+    async function load() {
+      const params = new URLSearchParams({ page: state.page, size: state.size, sort: state.sort });
+      for (const k of ["q", "type", "owner"]) if (state[k]) params.set(k, state[k]);
+      try {
+        const data = await api("/companies?" + params.toString());
+        const box = document.getElementById("tableBox");
+        box.innerHTML = data.content.length === 0
+          ? `<div class="empty">Nenhuma empresa encontrada.</div>`
+          : `<table class="grid">
+              <thead><tr>
+                <th>Empresa</th><th>Cidade</th><th>Tipo</th><th>Responsável</th><th>Contatos</th><th>Criada em</th>
+              </tr></thead>
+              <tbody>
+                ${data.content.map((c) => `
+                  <tr class="clickable" data-id="${c.id}">
+                    <td><strong>${esc(c.name)}</strong><div class="muted">${esc(c.industry || "—")}</div></td>
+                    <td>${esc(c.city || "—")}</td>
+                    <td>${typeBadge(c.type)}</td>
+                    <td>${esc(c.ownerName || "—")}</td>
+                    <td class="score">${c.contactCount}</td>
+                    <td>${fmtDate(c.createdAt)}</td>
+                  </tr>`).join("")}
+              </tbody>
+            </table>`;
+        renderPager(document.getElementById("pager"), data, "empresas", (dir) => { state.page += dir; load(); });
+      } catch (err) {
+        toast(err.message, "err");
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>

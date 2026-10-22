@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RafaLink CRM - Contato</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="app"></div>
+
+  <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/contact-form.js"></script>
+  <script>
+    const contactId = new URLSearchParams(location.search).get("id");
+    const content = renderLayout("contacts", "Detalhe do contato");
+
+    async function load() {
+      try {
+        render(await api("/contacts/" + contactId));
+      } catch (err) {
+        content.innerHTML = `<p class="bad">${esc(err.message)}</p><p><a class="link" href="contacts.html">← Voltar para contatos</a></p>`;
+      }
+    }
+
+    function render(c) {
+      content.innerHTML = `
+        <p><a href="contacts.html" class="muted">← Voltar para contatos</a></p>
+        <div class="page-head">
+          <div><h2>${esc(c.name)}</h2><div class="muted">${esc(c.jobTitle || "Sem cargo")}</div></div>
+          ${contactStatusBadge(c.status)}
+        </div>
+        <div class="actions">
+          <button class="btn" id="editBtn">Editar</button>
+          ${canDelete() ? `<button class="btn btn-danger" id="deleteBtn">Excluir</button>` : ""}
+        </div>
+        <div class="detail-grid">
+          ${infoCard("E-mail", c.email)}
+          ${infoCard("Telefone", c.phone)}
+          ${c.companyId ? linkCard("Empresa", "company.html?id=" + c.companyId, c.companyName) : infoCard("Empresa", "")}
+          ${infoCard("Preferência de contato", PREFERENCE_LABEL[c.contactPreference])}
+          ${infoCard("Responsável", c.ownerName)}
+          ${infoCard("Criado em", fmtDateTime(c.createdAt))}
+          ${c.sourceLeadId ? linkCard("Origem", "lead.html?id=" + c.sourceLeadId, "Convertido do lead " + c.sourceLeadName) : ""}
+        </div>
+
+        <h3 class="section-title">Histórico de interações</h3>
+        <div class="empty">A timeline de ligações, e-mails e reuniões aparece aqui a partir da Etapa 5.</div>`;
+
+      document.getElementById("editBtn").addEventListener("click", async () => {
+        const opts = await api("/contacts/options");
+        openContactForm({ contact: c, owners: opts.owners, companies: opts.companies, onSaved: render });
+      });
+
+      const del = document.getElementById("deleteBtn");
+      if (del) del.addEventListener("click", async () => {
+        if (!confirm(`Excluir o contato "${c.name}"?`)) return;
+        try {
+          await api("/contacts/" + c.id, { method: "DELETE" });
+          location.href = "contacts.html";
+        } catch (err) {
+          toast(err.message, "err");
+        }
+      });
+    }
+
+    load();
+  </script>
+</body>
+</html>

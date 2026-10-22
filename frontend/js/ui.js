@@ -8,12 +8,16 @@ const CHANNEL_LABEL = {
   SITE: "Site", EVENTO: "Evento", OUTROS: "Outros",
 };
 
+const TYPE_LABEL = { PROSPECT: "Prospect", CLIENTE: "Cliente" };
+const CONTACT_STATUS_LABEL = { ATIVO: "Ativo", INATIVO: "Inativo" };
+const PREFERENCE_LABEL = { EMAIL: "E-mail", WHATSAPP: "WhatsApp", TELEFONE: "Telefone", NENHUMA: "Sem preferência" };
+
 // Quando uma etapa for implementada, basta trocar "stage" por "href" no item do menu.
 const MENU = [
   { key: "dashboard", label: "Dashboard", href: "app.html" },
   { key: "leads", label: "Leads", href: "leads.html" },
-  { key: "companies", label: "Empresas", stage: 3 },
-  { key: "contacts", label: "Contatos", stage: 3 },
+  { key: "companies", label: "Empresas", href: "companies.html" },
+  { key: "contacts", label: "Contatos", href: "contacts.html" },
   { key: "pipeline", label: "Pipeline", stage: 4 },
   { key: "activities", label: "Atividades", stage: 5 },
   { key: "campaigns", label: "Campanhas", stage: 6 },
@@ -79,4 +83,52 @@ function renderLayout(activeKey, title) {
 
   document.getElementById("logoutBtn").addEventListener("click", logout);
   return document.getElementById("content");
+}
+
+function typeBadge(type) {
+  return `<span class="badge ty-${esc(type)}">${esc(TYPE_LABEL[type] || type)}</span>`;
+}
+
+function contactStatusBadge(status) {
+  return `<span class="badge ct-${esc(status)}">${esc(CONTACT_STATUS_LABEL[status] || status)}</span>`;
+}
+
+// Só ADMIN e SALES_MANAGER veem o botão de excluir (o backend também bloqueia).
+function canDelete() {
+  return ["ADMIN", "SALES_MANAGER"].includes((getUser() || {}).role);
+}
+
+function infoCard(label, value) {
+  return `<div class="card"><div class="label">${esc(label)}</div><div class="value sm">${esc(value || "—")}</div></div>`;
+}
+
+function linkCard(label, href, text) {
+  return `<div class="card"><div class="label">${esc(label)}</div>
+    <div class="value sm"><a class="link" href="${esc(href)}">${esc(text)}</a></div></div>`;
+}
+
+function fillSelect(id, pairs) {
+  document.getElementById(id).insertAdjacentHTML(
+    "beforeend",
+    pairs.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join("")
+  );
+}
+
+function debounce(fn, ms = 300) {
+  let t;
+  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+}
+
+// Paginação padrão: go(-1) = página anterior, go(1) = próxima.
+function renderPager(el, data, noun, go) {
+  const pages = Math.max(data.totalPages, 1);
+  el.innerHTML = `
+    <span>Página ${data.page + 1} de ${pages} · ${data.totalElements} ${noun}</span>
+    <div>
+      <button class="btn" data-dir="-1" ${data.page === 0 ? "disabled" : ""}>Anterior</button>
+      <button class="btn" data-dir="1" ${data.page + 1 >= pages ? "disabled" : ""}>Próxima</button>
+    </div>`;
+  el.querySelectorAll("button").forEach((b) =>
+    b.addEventListener("click", () => go(Number(b.dataset.dir)))
+  );
 }

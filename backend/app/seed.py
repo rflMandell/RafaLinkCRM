@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from .database import get_conn
+from .database import get_conn, now_iso
 from .security import hash_password
 
 # Usuários de demonstração (um por papel). Senhas simples de propósito, só para uso local.
@@ -24,6 +24,28 @@ DEMO_LEADS = [
     ("Lucas Ferreira", "lucas@alfa.com", "11999990010", "Alfa Tecnologia", "Indicação", "WHATSAPP", "QUALIFICADO", 79, "Apresentar demo"),
     ("Beatriz Rocha", "beatriz@oldcrm.com", "11999990011", "Old CRM Ltda", "Site", "SITE", "ARQUIVADO", 15, None),
     ("Marcos Pereira", "marcos@pereiraseg.com", "11999990012", "Pereira Seguros", "LinkedIn", "EMAIL", "EM_CONTATO", 58, "Follow-up em 2 dias"),
+]
+
+# nome, segmento, site, telefone, cidade, tipo
+DEMO_COMPANIES = [
+    ("Empresa XYZ", "Tecnologia", "www.empresaxyz.com", "1133330001", "São Paulo", "PROSPECT"),
+    ("Bela Flor", "Varejo", "www.belaflor.com", "1133330002", "Campinas", "CLIENTE"),
+    ("Construtora Horizonte", "Construção", "www.horizonte.com.br", "1133330003", "Curitiba", "PROSPECT"),
+    ("Clínica Vida Plena", "Saúde", "www.vidaplena.com.br", "1133330004", "Belo Horizonte", "CLIENTE"),
+    ("Escola Novo Saber", "Educação", "www.novosaber.edu.br", "1133330005", "Porto Alegre", "PROSPECT"),
+    ("Mercado Bom Preço", "Varejo", None, "1133330006", "Santos", "PROSPECT"),
+]
+
+# nome, cargo, e-mail, telefone, empresa, preferência de contato
+DEMO_CONTACTS = [
+    ("Patrícia Nunes", "Compras", "patricia@empresaxyz.com", "11988880001", "Empresa XYZ", "EMAIL"),
+    ("André Almeida", "Diretor Financeiro", "andre@empresaxyz.com", "11988880002", "Empresa XYZ", "WHATSAPP"),
+    ("Juliana Martins", "Gerente", "juliana@belaflor.com", "11999990007", "Bela Flor", "EMAIL"),
+    ("Roberto Campos", "Engenheiro Chefe", "roberto@horizonte.com.br", "11988880004", "Construtora Horizonte", "TELEFONE"),
+    ("Helena Duarte", "Diretora Clínica", "helena@vidaplena.com.br", "11988880005", "Clínica Vida Plena", "EMAIL"),
+    ("Marcelo Tavares", "TI", "marcelo@vidaplena.com.br", "11988880006", "Clínica Vida Plena", "WHATSAPP"),
+    ("Sandra Lopes", "Coordenadora", "sandra@novosaber.edu.br", "11988880007", "Escola Novo Saber", "EMAIL"),
+    ("Paulo Mendes", "Proprietário", None, "11988880008", "Mercado Bom Preço", "TELEFONE"),
 ]
 
 
@@ -68,5 +90,46 @@ def seed() -> None:
             )
         conn.commit()
         print("[seed] leads de demonstração criados")
+        
+    if conn.execute("SELECT COUNT(*) FROM companies").fetchone()[0] == 0:
+        org_id = conn.execute("SELECT id FROM organizations ORDER BY id LIMIT 1").fetchone()["id"]
+        owner_ids = [
+            r["id"]
+            for r in conn.execute(
+                "SELECT id FROM users WHERE organization_id = ? ORDER BY id", (org_id,)
+            )
+        ]
+        now = now_iso()
+
+        company_ids = {}
+        for i, (name, industry, website, phone, city, ctype) in enumerate(DEMO_COMPANIES):
+            cur = conn.execute(
+                "INSERT INTO companies(organization_id, name, industry, website, phone, city, "
+                "type, owner_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (org_id, name, industry, website, phone, city, ctype,
+                 owner_ids[i % len(owner_ids)], now, now),
+            )
+            company_ids[name] = cur.lastrowid
+
+        for i, (name, job, email, phone, company, pref) in enumerate(DEMO_CONTACTS):
+            # Se o contato veio de um lead já convertido, guarda o vínculo nos dois lados
+            lead = conn.execute(
+                "SELECT id FROM leads WHERE organization_id = ? AND email = ? AND status = 'CONVERTIDO'",
+                (org_id, email),
+            ).fetchone() if email else None
+            cur = conn.execute(
+                "INSERT INTO contacts(organization_id, company_id, name, job_title, email, phone, "
+                "owner_id, status, contact_preference, source_lead_id, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, 'ATIVO', ?, ?, ?, ?)",
+                (org_id, company_ids[company], name, job, email, phone,
+                 owner_ids[i % len(owner_ids)], pref, lead["id"] if lead else None, now, now),
+            )
+            if lead:
+                conn.execute(
+                    "UPDATE leads SET contact_id = ?, company_id = ? WHERE id = ?",
+                    (cur.lastrowid, company_ids[company], lead["id"]),
+                )
+        conn.commit()
+        print("[seed] empresas e contatos de demonstração criados")
 
     conn.close()

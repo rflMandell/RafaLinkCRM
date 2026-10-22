@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RafaLink CRM - Contatos</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="app"></div>
+
+  <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/contact-form.js"></script>
+  <script>
+    const state = { page: 0, size: 10, q: "", companyId: "", status: "", owner: "", sort: "name,asc" };
+    let options = { statuses: [], preferences: [], owners: [], companies: [] };
+
+    async function init() {
+      const content = renderLayout("contacts", "Contatos");
+      content.innerHTML = `
+        <div class="page-head">
+          <h2>Contatos</h2>
+          <button class="btn btn-primary" id="newBtn">+ Novo contato</button>
+        </div>
+        <div class="toolbar">
+          <input id="fq" placeholder="Buscar por nome, e-mail, cargo ou empresa" />
+          <select id="fcompany"><option value="">Todas as empresas</option></select>
+          <select id="fstatus"><option value="">Todos os status</option></select>
+          <select id="fowner"><option value="">Todos os responsáveis</option></select>
+          <select id="fsort">
+            <option value="name,asc">Nome (A-Z)</option>
+            <option value="createdAt,desc">Mais recentes</option>
+            <option value="company,asc">Empresa (A-Z)</option>
+          </select>
+        </div>
+        <div id="tableBox"></div>
+        <div class="pager" id="pager"></div>`;
+
+      try {
+        options = await api("/contacts/options");
+      } catch (err) {
+        toast(err.message, "err");
+        return;
+      }
+      fillSelect("fcompany", options.companies.map((c) => [c.id, c.name]));
+      fillSelect("fstatus", options.statuses.map((s) => [s, CONTACT_STATUS_LABEL[s]]));
+      fillSelect("fowner", options.owners.map((o) => [o.id, o.name]));
+
+      const bind = (id, key) =>
+        document.getElementById(id).addEventListener("change", (e) => {
+          state[key] = e.target.value;
+          state.page = 0;
+          load();
+        });
+      bind("fcompany", "companyId");
+      bind("fstatus", "status");
+      bind("fowner", "owner");
+      bind("fsort", "sort");
+
+      document.getElementById("fq").addEventListener("input", debounce((e) => {
+        state.q = e.target.value.trim();
+        state.page = 0;
+        load();
+      }));
+
+      document.getElementById("newBtn").addEventListener("click", () =>
+        openContactForm({
+          owners: options.owners,
+          companies: options.companies,
+          onSaved: (c) => (location.href = "contact.html?id=" + c.id),
+        })
+      );
+
+      document.getElementById("tableBox").addEventListener("click", (e) => {
+        const row = e.target.closest("tr[data-id]");
+        if (row) location.href = "contact.html?id=" + row.dataset.id;
+      });
+
+      load();
+    }
+
+    async function load() {
+      const params = new URLSearchParams({ page: state.page, size: state.size, sort: state.sort });
+      for (const k of ["q", "companyId", "status", "owner"]) if (state[k]) params.set(k, state[k]);
+      try {
+        const data = await api("/contacts?" + params.toString());
+        const box = document.getElementById("tableBox");
+        box.innerHTML = data.content.length === 0
+          ? `<div class="empty">Nenhum contato encontrado.</div>`
+          : `<table class="grid">
+              <thead><tr>
+                <th>Contato</th><th>Empresa</th><th>E-mail / Telefone</th>
+                <th>Preferência</th><th>Responsável</th><th>Status</th>
+              </tr></thead>
+              <tbody>
+                ${data.content.map((c) => `
+                  <tr class="clickable" data-id="${c.id}">
+                    <td><strong>${esc(c.name)}</strong><div class="muted">${esc(c.jobTitle || "—")}</div></td>
+                    <td>${esc(c.companyName || "—")}</td>
+                    <td>${esc(c.email || "—")}<div class="muted">${esc(c.phone || "—")}</div></td>
+                    <td>${esc(PREFERENCE_LABEL[c.contactPreference] || "—")}</td>
+                    <td>${esc(c.ownerName || "—")}</td>
+                    <td>${contactStatusBadge(c.status)}</td>
+                  </tr>`).join("")}
+              </tbody>
+            </table>`;
+        renderPager(document.getElementById("pager"), data, "contatos", (dir) => { state.page += dir; load(); });
+      } catch (err) {
+        toast(err.message, "err");
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>

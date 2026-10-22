@@ -62,3 +62,14 @@ def get_current_user(
     if user is None:
         raise AppError(401, "USER_NOT_FOUND", "Usuário não encontrado ou inativo.")
     return user
+
+def require_roles(*roles: str):
+    """Dependência que só deixa passar usuários com um dos papéis informados.
+    Na Etapa 10 isso vira o sistema completo de permissões (RBAC)."""
+
+    def checker(user=Depends(get_current_user)):
+        if user["role"] not in roles:
+            raise AppError(403, "FORBIDDEN", "Você não tem permissão para esta ação.")
+        return user
+
+    return checker
