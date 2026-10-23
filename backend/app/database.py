@@ -246,6 +246,38 @@ MIGRATIONS = [
         CREATE INDEX idx_activities_opportunity ON activities(opportunity_id);
         """,
     ),
+    (
+        "V14__create_campaigns",
+        """
+        CREATE TABLE campaigns (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            organization_id INTEGER NOT NULL REFERENCES organizations(id),
+            name TEXT NOT NULL,
+            channel TEXT,
+            status TEXT NOT NULL DEFAULT 'RASCUNHO',
+            budget REAL NOT NULL DEFAULT 0,
+            cost REAL NOT NULL DEFAULT 0,
+            start_date TEXT,
+            end_date TEXT,
+            description TEXT,
+            owner_id INTEGER REFERENCES users(id),
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX idx_campaigns_org ON campaigns(organization_id, status);
+        """,
+    ),
+    (
+        "V15__add_campaign_attribution",
+        """
+        ALTER TABLE leads ADD COLUMN campaign_id INTEGER REFERENCES campaigns(id);
+        ALTER TABLE leads ADD COLUMN first_contact_at TEXT;
+        ALTER TABLE opportunities ADD COLUMN campaign_id INTEGER REFERENCES campaigns(id);
+        UPDATE leads SET first_contact_at = last_interaction_at WHERE last_interaction_at IS NOT NULL;
+        CREATE INDEX idx_leads_campaign ON leads(campaign_id);
+        CREATE INDEX idx_opps_campaign ON opportunities(campaign_id);
+        """,
+    ),
 ]
 
 

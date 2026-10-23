@@ -66,6 +66,7 @@
           ${field("Telefone", lead.phone)}
           ${field("Origem", lead.source)}
           ${field("Canal", CHANNEL_LABEL[lead.channel])}
+          ${lead.campaignId ? linkCard("Campanha", "campaign.html?id=" + lead.campaignId, lead.campaignName) : field("Campanha", null)}
           ${field("Responsável", lead.ownerName)}
           ${field("Score", lead.score + "/100")}
           ${field("Próxima ação", lead.nextAction)}
@@ -82,7 +83,7 @@
       const edit = document.getElementById("editBtn");
       if (edit) edit.addEventListener("click", async () => {
         const opts = await api("/leads/options");
-        openLeadForm({ lead, owners: opts.owners, onSaved: render });
+        openLeadForm({ lead, owners: opts.owners, campaigns: opts.campaigns, onSaved: render });
       });
     }
 

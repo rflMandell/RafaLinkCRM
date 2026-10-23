@@ -13,8 +13,8 @@
   <script src="js/ui.js"></script>
   <script src="js/lead-form.js"></script>
   <script>
-    const state = { page: 0, size: 10, q: "", status: "", owner: "", channel: "", sort: "createdAt,desc" };
-    let options = { statuses: [], channels: [], owners: [] };
+    const state = { page: 0, size: 10, q: "", status: "", owner: "", channel: "", campaign: "", sort: "createdAt,desc" };
+    let options = { statuses: [], channels: [], owners: [], campaigns: [] };
 
     async function init() {
       const content = renderLayout("leads", "Leads");
@@ -27,6 +27,7 @@
           <input id="fq" placeholder="Buscar por nome, e-mail ou empresa" />
           <select id="fstatus"><option value="">Todos os status</option></select>
           <select id="fchannel"><option value="">Todos os canais</option></select>
+          <select id="fcampaign"><option value="">Todas as campanhas</option></select>
           <select id="fowner"><option value="">Todos os responsáveis</option></select>
           <select id="fsort">
             <option value="createdAt,desc">Mais recentes</option>
@@ -54,6 +55,7 @@
       fill("fstatus", options.statuses.map((s) => [s, STATUS_LABEL[s]]));
       fill("fchannel", options.channels.map((c) => [c, CHANNEL_LABEL[c]]));
       fill("fowner", options.owners.map((o) => [o.id, o.name]));
+      fill("fcampaign", options.campaigns.map((c) => [c.id, c.name]));
 
       const bind = (id, key) =>
         document.getElementById(id).addEventListener("change", (e) => {
@@ -64,6 +66,7 @@
       bind("fstatus", "status");
       bind("fchannel", "channel");
       bind("fowner", "owner");
+      bind("fcampaign", "campaign");
       bind("fsort", "sort");
 
       let timer;
@@ -77,7 +80,7 @@
       });
 
       document.getElementById("newBtn").addEventListener("click", () =>
-        openLeadForm({ owners: options.owners, onSaved: () => { state.page = 0; load(); } })
+        openLeadForm({ owners: options.owners, campaigns: options.campaigns, onSaved: () => { state.page = 0; load(); } })
       );
 
       document.getElementById("tableBox").addEventListener("click", (e) => {
@@ -90,7 +93,7 @@
 
     async function load() {
       const params = new URLSearchParams({ page: state.page, size: state.size, sort: state.sort });
-      for (const k of ["q", "status", "owner", "channel"]) {
+      for (const k of ["q", "status", "owner", "channel", "campaign"]) {
         if (state[k]) params.set(k, state[k]);
       }
       try {
@@ -108,7 +111,8 @@
         box.innerHTML = `
           <table class="grid">
             <thead><tr>
-              <th>Lead</th><th>Origem / Canal</th><th>Responsável</th>
+                  <td>${esc(l.source || "—")}<div class="muted">${esc(CHANNEL_LABEL[l.channel] || "—")}</div>
+                    ${l.campaignName ? `<div class="muted">Campanha: ${esc(l.campaignName)}</div>` : ""}</td>
               <th>Score</th><th>Status</th><th>Criado em</th><th>Próxima ação</th>
             </tr></thead>
             <tbody>

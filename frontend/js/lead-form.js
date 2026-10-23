@@ -1,5 +1,5 @@
 // Abre o formulário de criar (lead = null) ou editar (lead = objeto) um lead.
-function openLeadForm({ lead = null, owners = [], onSaved }) {
+function openLeadForm({ lead = null, owners = [], campaigns = [], onSaved }) {
   const me = getUser();
   const val = (k) => esc(lead?.[k] ?? "");
   const ownerSelected = lead ? lead.ownerId : me.id;
@@ -9,6 +9,11 @@ function openLeadForm({ lead = null, owners = [], onSaved }) {
     .join("");
   const ownerOpts = owners
     .map((o) => `<option value="${o.id}" ${o.id === ownerSelected ? "selected" : ""}>${esc(o.name)}</option>`)
+    .join("");
+  // campanha encerrada não recebe leads novos, mas a atual do lead continua aparecendo
+  const campaignOpts = campaigns
+    .filter((c) => c.status !== "ENCERRADA" || c.id === lead?.campaignId)
+    .map((c) => `<option value="${c.id}" ${c.id === lead?.campaignId ? "selected" : ""}>${esc(c.name)}</option>`)
     .join("");
 
   const dlg = document.createElement("dialog");
@@ -35,6 +40,7 @@ function openLeadForm({ lead = null, owners = [], onSaved }) {
           <select name="ownerId">${lead ? '<option value="">Sem responsável</option>' : ""}${ownerOpts}</select>
         </div>
         <div><label>Score (0-100)</label><input name="score" type="number" min="0" max="100" value="${lead ? lead.score : 0}"></div>
+        <div class="full"><label>Campanha</label><select name="campaignId"><option value="">Nenhuma</option>${campaignOpts}</select></div>
         <div class="full"><label>Próxima ação</label><input name="nextAction" value="${val("nextAction")}"></div>
       </div>
       <div class="error" id="formError"></div>
@@ -63,6 +69,7 @@ function openLeadForm({ lead = null, owners = [], onSaved }) {
       ownerId: fd.get("ownerId") ? Number(fd.get("ownerId")) : null,
       score: Number(fd.get("score") || 0),
       nextAction: text("nextAction"),
+      campaignId: fd.get("campaignId") ? Number(fd.get("campaignId")) : null,
     };
     try {
       const saved = lead

@@ -7,7 +7,10 @@ from fastapi.staticfiles import StaticFiles
 
 from .database import run_migrations
 from .errors import register_error_handlers
-from .routers import activities, auth, companies, contacts, customers, leads, opportunities, pipelines
+from .routers import (
+    activities, auth, campaigns, companies, contacts, customers, leads,
+    opportunities, pipelines, reports,
+)
 from .seed import seed
 
 FRONTEND_DIR = Path(__file__).resolve().parents[2] / "frontend"
@@ -55,6 +58,8 @@ api_v1.include_router(activities.router)
 api_v1.include_router(activities.agenda_router)
 api_v1.include_router(activities.tasks_router)
 api_v1.include_router(customers.router)
+api_v1.include_router(campaigns.router)
+api_v1.include_router(reports.router)
 app.include_router(api_v1)
 
 # O backend também serve o frontend: tudo em http://localhost:8000

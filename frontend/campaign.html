@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RafaLink CRM - Campanha</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="app"></div>
+
+  <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/charts.js"></script>
+  <script src="js/campaign-form.js"></script>
+  <script>
+    const campaignId = new URLSearchParams(location.search).get("id");
+    const content = renderLayout("campaigns", "Detalhe da campanha");
+    const FLOW = ["NOVO", "EM_CONTATO", "QUALIFICADO", "OPORTUNIDADE", "CONVERTIDO"];
+
+    async function load() {
+      try { render(await api("/campaigns/" + campaignId)); }
+      catch (err) {
+        content.innerHTML = `<p class="bad">${esc(err.message)}</p><p><a href="campaigns.html">← Voltar para campanhas</a></p>`;
+      }
+    }
+
+    function render(c) {
+      const m = c.metrics, me = getUser();
+      const actions = ["ATIVA", "PAUSADA", "ENCERRADA"].filter((s) => c.allowedActions.includes(s))
+        .map((s) => `<button class="btn ${CAMPAIGN_ACTION[s].cls}" data-status="${s}">${c.status === "PAUSADA" && s === "ATIVA" ? "Retomar" : CAMPAIGN_ACTION[s].label}</button>`).join("");
+      const canDelete = ["ADMIN", "SALES_MANAGER"].includes(me.role);
+      const pct = c.budget > 0 ? (c.cost / c.budget) * 100 : 0;
+      const cls = pct > 100 ? "crit" : pct >= 80 ? "warn" : "";
+      const tile = (label, value, sub = "") =>
+        `<div class="tile"><div class="label">${esc(label)}</div><div class="value">${value}</div>${sub ? `<div class="delta">${esc(sub)}</div>` : ""}</div>`;
+      const money = (v) => (v === null || v === undefined ? "—" : esc(fmtMoney(v)));
+
+      content.innerHTML = `
+        <p><a href="campaigns.html" class="muted">← Voltar para campanhas</a></p>
+        <div class="page-head">
+          <div><h2>${esc(c.name)}</h2>
+            <div class="muted">${esc(CHANNEL_LABEL[c.channel] || "Sem canal")} · ${fmtDay(c.startDate)} a ${fmtDay(c.endDate)} · Responsável: ${esc(c.ownerName || "—")}</div>
+          </div>
+          ${campaignBadge(c.status)}
+        </div>
+        ${c.description ? `<p class="muted">${esc(c.description)}</p>` : ""}
+        <div class="actions">${actions}<button class="btn" id="editBtn">Editar</button>
+          ${canDelete ? `<button class="btn btn-danger" id="delBtn">Excluir</button>` : ""}</div>
+
+        <div class="tiles">
+          ${tile("Leads", NF.format(m.leads), `${m.converted} convertidos (${NF_1.format(m.conversionRate)}%)`)}
+          ${tile("Oportunidades", NF.format(m.opportunities), `${m.won} ganhas`)}
+          ${tile("Receita ganha", esc(fmtMoney(m.revenue)), `Em aberto: ${fmtMoney(m.openValue)}`)}
+          ${tile("ROI", roiHtml(m.roi), m.roi === null ? "Informe o investimento" : "(receita − custo) ÷ custo")}
+          ${tile("Custo por lead", money(m.costPerLead))}
+          ${tile("CAC (custo por venda)", money(m.cac))}
+          <div class="tile"><div class="label">Investido</div>
+            <div class="value">${esc(fmtMoney(c.cost))}</div>
+            <div class="delta">${c.budget > 0 ? `${NF_1.format(pct)}% de ${esc(fmtMoney(c.budget))}${pct > 100 ? " ▲ acima do orçamento" : ""}` : "Sem orçamento definido"}</div>
+            <div class="meter"><span class="${cls}" style="width:${Math.min(pct, 100)}%"></span></div></div>
+        </div>
+
+        <div class="viz-grid"><div id="funnelSlot"></div></div>
+
+        <div class="two-col">
+          <div class="card mini-list"><div class="label">Leads recentes</div>
+            ${c.leads.length ? `<table class="grid"><tbody>${c.leads.map((l) => `
+              <tr><td><a href="lead.html?id=${l.id}">${esc(l.name)}</a><div class="muted">${esc(l.company || "—")}</div></td>
+              <td>${statusBadge(l.status)}</td></tr>`).join("")}</tbody></table>` : `<div class="empty">Nenhum lead atribuído.</div>`}
+          </div>
+          <div class="card mini-list"><div class="label">Oportunidades</div>
+            ${c.opportunities.length ? `<table class="grid"><tbody>${c.opportunities.map((o) => `
+              <tr><td><a href="opportunity.html?id=${o.id}">${esc(o.title)}</a><div class="muted">${esc(o.stageName)}</div></td>
+              <td class="num">${esc(fmtMoney(o.value))}</td></tr>`).join("")}</tbody></table>` : `<div class="empty">Nenhuma oportunidade atribuída.</div>`}
+          </div>
+        </div>`;
+
+      // funil de leads da campanha: contagem acumulada por etapa (rampa ordinal)
+      const by = c.leadsByStatus;
+      const funnel = FLOW.map((s, i) => ({ label: STATUS_LABEL[s], value: FLOW.slice(i).reduce((a, k) => a + (by[k] || 0), 0) }));
+      const extra = `Perdidos: ${by.PERDIDO || 0} · Arquivados: ${by.ARQUIVADO || 0} (fora do funil)`;
+      mountChartCard(document.getElementById("funnelSlot"), {
+        id: "campFunnel", title: "Funil de leads da campanha", subtitle: extra, wide: true,
+        render: (box) => hbarChart(box, funnel, { colors: RAMP }),
+        columns: ["Etapa", "Leads"], rows: funnel.map((f) => [f.label, f.value]),
+      });
+
+      content.querySelectorAll("[data-status]").forEach((b) => b.addEventListener("click", () => changeStatus(b.dataset.status)));
+      document.getElementById("editBtn").addEventListener("click", async () => {
+        const opts = await api("/campaigns/options");
+        openCampaignForm({ campaign: c, owners: opts.owners, onSaved: render });
+      });
+      const del = document.getElementById("delBtn");
+      if (del) del.addEventListener("click", async () => {
+        if (!confirm("Excluir esta campanha? Os leads e oportunidades continuam existindo, mas perdem a atribuição.")) return;
+        try { await api("/campaigns/" + c.id, { method: "DELETE" }); location.href = "campaigns.html"; }
+        catch (err) { toast(err.message, "err"); }
+      });
+    }
+
+    async function changeStatus(status) {
+      if (status === "ENCERRADA" && !confirm("Encerrar a campanha? Depois disso ela não aceita novos leads nem volta a ficar ativa.")) return;
+      try { render(await api(`/campaigns/${campaignId}/status`, { method: "POST", body: { status } })); toast("Status atualizado"); }
+      catch (err) { toast(err.message, "err"); }
+    }
+
+    load();
+  </script>
+</body>
+</html>

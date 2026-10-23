@@ -22,7 +22,7 @@ const MENU = [
   { key: "tasks", label: "Tarefas", href: "tasks.html" },
   { key: "agenda", label: "Agenda", href: "agenda.html" },
   { key: "activities", label: "Atividades", href: "activities.html" },
-  { key: "campaigns", label: "Campanhas", stage: 6 },
+  { key: "campaigns", label: "Campanhas", href: "campaigns.html" },
   { key: "forecast", label: "Forecast", stage: 7 },
   { key: "settings", label: "Configurações", stage: 10 },
 ];

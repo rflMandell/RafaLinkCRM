@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RafaLink CRM - Campanhas</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="app"></div>
+
+  <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/charts.js"></script>
+  <script src="js/campaign-form.js"></script>
+  <script>
+    const state = { page: 0, size: 10, q: "", status: "", channel: "", sort: "createdAt,desc" };
+    let options = { statuses: [], channels: [], owners: [] };
+
+    async function init() {
+      const content = renderLayout("campaigns", "Campanhas");
+      content.innerHTML = `
+        <div class="page-head">
+          <h2>Campanhas</h2>
+          <button class="btn btn-primary" id="newBtn">+ Nova campanha</button>
+        </div>
+        <div class="toolbar">
+          <input id="fq" placeholder="Buscar pelo nome da campanha" />
+          <select id="fstatus"><option value="">Todos os status</option></select>
+          <select id="fchannel"><option value="">Todos os canais</option></select>
+          <select id="fsort">
+            <option value="createdAt,desc">Mais recentes</option>
+            <option value="revenue,desc">Maior receita</option>
+            <option value="leads,desc">Mais leads</option>
+            <option value="cost,desc">Maior investimento</option>
+            <option value="name,asc">Nome (A-Z)</option>
+          </select>
+        </div>
+        <div id="tableBox"></div>
+        <div class="pager" id="pager"></div>`;
+
+      try { options = await api("/campaigns/options"); }
+      catch (err) { toast(err.message, "err"); return; }
+
+      const fill = (id, items) => document.getElementById(id).insertAdjacentHTML(
+        "beforeend", items.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join(""));
+      fill("fstatus", options.statuses.map((s) => [s, CAMPAIGN_STATUS_LABEL[s]]));
+      fill("fchannel", options.channels.map((c) => [c, CHANNEL_LABEL[c]]));
+
+      const bind = (id, key) => document.getElementById(id).addEventListener("change", (e) => {
+        state[key] = e.target.value; state.page = 0; load();
+      });
+      bind("fstatus", "status"); bind("fchannel", "channel"); bind("fsort", "sort");
+
+      let timer;
+      document.getElementById("fq").addEventListener("input", (e) => {
+        clearTimeout(timer);
+        timer = setTimeout(() => { state.q = e.target.value.trim(); state.page = 0; load(); }, 300);
+      });
+      document.getElementById("newBtn").addEventListener("click", () =>
+        openCampaignForm({ owners: options.owners, onSaved: (c) => { location.href = "campaign.html?id=" + c.id; } }));
+      document.getElementById("tableBox").addEventListener("click", (e) => {
+        const row = e.target.closest("tr[data-id]");
+        if (row) location.href = "campaign.html?id=" + row.dataset.id;
+      });
+      load();
+    }
+
+    async function load() {
+      const params = new URLSearchParams({ page: state.page, size: state.size, sort: state.sort });
+      for (const k of ["q", "status", "channel"]) if (state[k]) params.set(k, state[k]);
+      try { renderTable(await api("/campaigns?" + params.toString())); }
+      catch (err) { toast(err.message, "err"); }
+    }
+
+    function budgetCell(c) {
+      const pct = c.budget > 0 ? (c.cost / c.budget) * 100 : 0;
+      const cls = pct > 100 ? "crit" : pct >= 80 ? "warn" : "";
+      return `${fmtMoney(c.cost)} <span class="muted">de ${fmtMoney(c.budget)}</span>
+        <div class="meter" title="${NF_1.format(pct)}% do orçamento"><span class="${cls}" style="width:${Math.min(pct, 100)}%"></span></div>`;
+    }
+
+    function renderTable(data) {
+      const box = document.getElementById("tableBox");
+      if (data.content.length === 0) {
+        box.innerHTML = `<div class="empty">Nenhuma campanha encontrada.</div>`;
+      } else {
+        box.innerHTML = `
+          <table class="grid">
+            <thead><tr>
+              <th>Campanha</th><th>Status</th><th>Período</th><th>Investido</th>
+              <th class="num">Leads</th><th class="num">Conversão</th><th class="num">Receita</th><th class="num">ROI</th>
+            </tr></thead>
+            <tbody>
+              ${data.content.map((c) => `
+                <tr class="clickable" data-id="${c.id}">
+                  <td><strong>${esc(c.name)}</strong><div class="muted">${esc(CHANNEL_LABEL[c.channel] || "Sem canal")}</div></td>
+                  <td>${campaignBadge(c.status)}</td>
+                  <td>${fmtDay(c.startDate)}<div class="muted">até ${fmtDay(c.endDate)}</div></td>
+                  <td style="min-width:200px">${budgetCell(c)}</td>
+                  <td class="num">${c.metrics.leads}</td>
+                  <td class="num">${NF_1.format(c.metrics.conversionRate)}%</td>
+                  <td class="num">${fmtMoney(c.metrics.revenue)}</td>
+                  <td class="num">${roiHtml(c.metrics.roi)}</td>
+                </tr>`).join("")}
+            </tbody>
+          </table>`;
+      }
+      const pages = Math.max(data.totalPages, 1);
+      document.getElementById("pager").innerHTML = `
+        <span>Página ${data.page + 1} de ${pages} · ${data.totalElements} campanhas</span>
+        <div>
+          <button class="btn" id="prev" ${data.page === 0 ? "disabled" : ""}>Anterior</button>
+          <button class="btn" id="next" ${data.page + 1 >= pages ? "disabled" : ""}>Próxima</button>
+        </div>`;
+      document.getElementById("prev").addEventListener("click", () => { state.page--; load(); });
+      document.getElementById("next").addEventListener("click", () => { state.page++; load(); });
+    }
+
+    init();
+  </script>
+</body>
+</html>

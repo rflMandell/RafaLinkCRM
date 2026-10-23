@@ -190,9 +190,10 @@ def _resolve_links(db, user, lead_id, contact_id, company_id, opportunity_id):
 def _touch_lead(db, activity_type: str, lead_id: int | None, when: str) -> None:
     if lead_id and activity_type in INTERACTION_TYPES:
         db.execute(
-            "UPDATE leads SET last_interaction_at = ? "
+            "UPDATE leads SET last_interaction_at = ?, "
+            "first_contact_at = COALESCE(first_contact_at, ?) "
             "WHERE id = ? AND (last_interaction_at IS NULL OR last_interaction_at < ?)",
-            (when, lead_id, when),
+            (when, when, lead_id, when),
         )
 
 

@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from .database import get_conn, now_iso
 from .security import hash_password
 from .services import DEFAULT_STAGES, create_pipeline
+from .seed_campaigns import seed_campaigns
 
 # Usuários de demonstração (um por papel). Senhas simples de propósito, só para uso local.
 DEMO_USERS = [
@@ -280,5 +281,7 @@ def seed() -> None:
             )
         conn.commit()
         print("[seed] atividades de demonstração criadas")
+    
+    seed_campaigns(conn)
     
     conn.close()

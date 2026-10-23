@@ -8,7 +8,7 @@ from ..database import get_db, now_iso
 from ..errors import AppError
 from ..events import publish
 from ..security import get_current_user
-from ..services import check_owner as _check_owner, convert_lead
+from ..services import check_owner as _check_owner, check_campaign, convert_lead
 
 router = APIRouter(prefix="/leads", tags=["Leads"])
 
@@ -54,18 +54,20 @@ FIELD_TO_COLUMN = {
     "ownerId": "owner_id",
     "score": "score",
     "nextAction": "next_action",
+    "campaignId": "campaign_id",
 }
 
 EMAIL_PATTERN = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
 
 SELECT_SQL = (
     "SELECT l.*, u.name AS owner_name, c.name AS contact_name, co.name AS company_name, "
-    "op.title AS opportunity_title "
+    "op.title AS opportunity_title, ca.name AS campaign_name "
     "FROM leads l "
     "LEFT JOIN users u ON u.id = l.owner_id "
     "LEFT JOIN contacts c ON c.id = l.contact_id "
     "LEFT JOIN companies co ON co.id = l.company_id "
-    "LEFT JOIN opportunities op ON op.id = l.opportunity_id"
+    "LEFT JOIN opportunities op ON op.id = l.opportunity_id "
+    "LEFT JOIN campaigns ca ON ca.id = l.campaign_id"
 )
 
 
@@ -80,6 +82,7 @@ class LeadCreate(BaseModel):
     ownerId: int | None = None
     score: int = Field(default=0, ge=0, le=100)
     nextAction: str | None = Field(default=None, max_length=200)
+    campaignId: int | None = None
 
 
 class LeadUpdate(BaseModel):
@@ -92,6 +95,7 @@ class LeadUpdate(BaseModel):
     ownerId: int | None = None
     score: int | None = Field(default=None, ge=0, le=100)
     nextAction: str | None = Field(default=None, max_length=200)
+    campaignId: int | None = None
 
 
 class StatusChange(BaseModel):
@@ -117,6 +121,9 @@ def to_dto(r) -> dict:
         "companyName": r["company_name"],
         "opportunityId": r["opportunity_id"],
         "opportunityTitle": r["opportunity_title"],
+        "campaignId": r["campaign_id"],
+        "campaignName": r["campaign_name"],
+        "firstContactAt": r["first_contact_at"],
         "score": r["score"],
         "status": r["status"],
         "lostReason": r["lost_reason"],
@@ -156,13 +163,16 @@ def _change_status(db, user, lead_id: int, new_status: str, reason: str | None =
         convert_lead(db, user, lead)  # RN04: cria contato (e empresa) a partir do lead
 
     now = now_iso()
+    touched = now if new_status in INTERACTION_STATUSES else None
     db.execute(
         "UPDATE leads SET status = ?, lost_reason = ?, "
-        "last_interaction_at = COALESCE(?, last_interaction_at), updated_at = ? WHERE id = ?",
+        "last_interaction_at = COALESCE(?, last_interaction_at), "
+        "first_contact_at = COALESCE(first_contact_at, ?), updated_at = ? WHERE id = ?",
         (
             new_status,
             reason if new_status == "PERDIDO" else None,
-            now if new_status in INTERACTION_STATUSES else None,
+            touched,
+            touched,
             now,
             lead_id,
         ),
@@ -183,7 +193,15 @@ def options(db=Depends(get_db), user=Depends(get_current_user)):
         "SELECT id, name FROM users WHERE organization_id = ? AND active = 1 ORDER BY name",
         (user["organization_id"],),
     ).fetchall()
-    return {"statuses": STATUSES, "channels": CHANNELS, "owners": [dict(o) for o in owners]}
+    campaigns = db.execute(
+        "SELECT id, name, status FROM campaigns WHERE organization_id = ? ORDER BY name",
+        (user["organization_id"],),
+    ).fetchall()
+    return {
+        "statuses": STATUSES, "channels": CHANNELS,
+        "owners": [dict(o) for o in owners],
+        "campaigns": [dict(c) for c in campaigns],
+    }
 
 
 @router.get("")
@@ -197,6 +215,7 @@ def list_leads(
     q: str | None = None,
     minScore: int | None = None,
     maxScore: int | None = None,
+    campaign: int | None = None,
     sort: str = "createdAt,desc",
     db=Depends(get_db),
     user=Depends(get_current_user),
@@ -221,6 +240,9 @@ def list_leads(
     if channel:
         where.append("l.channel = ?")
         params.append(channel)
+    if campaign is not None:
+        where.append("l.campaign_id = ?")
+        params.append(campaign)
     if q and q.strip():
         like = f"%{q.strip()}%"
         where.append("(l.name LIKE ? OR l.email LIKE ? OR l.company LIKE ?)")
@@ -252,14 +274,16 @@ def list_leads(
 def create_lead(data: LeadCreate, db=Depends(get_db), user=Depends(get_current_user)):
     owner_id = data.ownerId or user["id"]
     _check_owner(db, user, owner_id)
+    check_campaign(db, user, data.campaignId, must_be_open=True)
     now = now_iso()
     cur = db.execute(
         "INSERT INTO leads(organization_id, name, email, phone, company, source, channel, "
-        "owner_id, score, status, next_action, created_at, updated_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'NOVO', ?, ?, ?)",
+        "owner_id, score, status, next_action, campaign_id, created_at, updated_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'NOVO', ?, ?, ?, ?)",
         (
             user["organization_id"], data.name, data.email, data.phone, data.company,
-            data.source, data.channel, owner_id, data.score, data.nextAction, now, now,
+            data.source, data.channel, owner_id, data.score, data.nextAction,
+            data.campaignId, now, now,
         ),
     )
     lead_id = cur.lastrowid
@@ -282,6 +306,9 @@ def update_lead(lead_id: int, data: LeadUpdate, db=Depends(get_db), user=Depends
     changes = data.model_dump(exclude_unset=True)
     if "ownerId" in changes:
         _check_owner(db, user, changes["ownerId"])
+
+    if "campaignId" in changes and changes["campaignId"] != lead["campaign_id"]:
+        check_campaign(db, user, changes["campaignId"], must_be_open=True)
 
     sets, params = [], []
     for field, value in changes.items():

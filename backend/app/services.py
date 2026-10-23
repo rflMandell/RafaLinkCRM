@@ -75,23 +75,17 @@ def convert_lead(db, user, lead) -> tuple[int, int | None, int | None]:
     pipeline = get_default_pipeline(db, user["organization_id"])
     stage = first_open_stage(db, pipeline["id"]) if pipeline else None
     if stage:
-        base = lead["company"].strip() if lead["company"] and lead["company"].strip() else lead["name"]
         cur = db.execute(
             "INSERT INTO opportunities(organization_id, title, value, probability, status, "
-            "pipeline_id, stage_id, company_id, contact_id, owner_id, lead_id, "
+            "pipeline_id, stage_id, company_id, contact_id, owner_id, lead_id, campaign_id, "
             "stage_changed_at, created_at, updated_at) "
-            "VALUES (?, ?, 0, ?, 'ABERTA', ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "VALUES (?, ?, 0, ?, 'ABERTA', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 user["organization_id"], f"Oportunidade - {base}", stage["probability"],
                 stage["pipeline_id"], stage["id"], company_id, contact_id, owner_id,
-                lead["id"], now, now, now,
+                lead["id"], lead["campaign_id"], now, now, now,
             ),
         )
-        opportunity_id = cur.lastrowid
-        add_history(db, user, opportunity_id, None, stage["name"], stage["probability"],
-                    "Criada pela conversão do lead")
-        publish(db, user, "OpportunityCreated", "opportunity", opportunity_id,
-                {"leadId": lead["id"], "origin": "lead_conversion"})
 
     db.execute(
         "UPDATE leads SET contact_id = ?, company_id = ?, opportunity_id = ? WHERE id = ?",
@@ -187,3 +181,17 @@ def to_utc_iso(dt: datetime) -> str:
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(timezone.utc).isoformat(timespec="seconds")
+
+def check_campaign(db, user, campaign_id: int | None, must_be_open: bool = False):
+    """Garante que a campanha existe na organização. Campanha encerrada não recebe novos leads."""
+    if campaign_id is None:
+        return None
+    row = db.execute(
+        "SELECT id, name, status FROM campaigns WHERE id = ? AND organization_id = ?",
+        (campaign_id, user["organization_id"]),
+    ).fetchone()
+    if row is None:
+        raise AppError(422, "CAMPAIGN_NOT_FOUND", "Campanha inválida.")
+    if must_be_open and row["status"] == "ENCERRADA":
+        raise AppError(422, "CAMPAIGN_CLOSED", "A campanha está encerrada e não aceita novos leads.")
+    return row

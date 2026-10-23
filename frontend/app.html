@@ -11,17 +11,47 @@
 
   <script src="js/api.js"></script>
   <script src="js/ui.js"></script>
+  <script src="js/charts.js"></script>
   <script>
+    const PERIODS = [[7, "Últimos 7 dias"], [30, "Últimos 30 dias"], [90, "Últimos 90 dias"], [365, "Últimos 12 meses"]];
+    const card = (label, value, cls = "") =>
+      `<div class="card"><div class="label">${esc(label)}</div><div class="value ${cls}">${esc(value)}</div></div>`;
+
+    let days = 30;
+    try { days = Number(localStorage.getItem("rafalink_period")) || 30; } catch {}
+    if (!PERIODS.some(([d]) => d === days)) days = 30;
+
     (async () => {
       const content = renderLayout("dashboard", "Dashboard");
       const me = getUser();
       content.innerHTML = `
         <h2>Bem-vindo, ${esc(me.name.split(" ")[0])}</h2>
-        <div class="cards" id="cards"></div>`;
+        <h3 class="section-title" style="margin-top:0">Situação atual</h3>
+        <div class="cards" id="cards"></div>
 
-      const card = (label, value, cls = "") =>
-        `<div class="card"><div class="label">${label}</div><div class="value ${cls}">${esc(value)}</div></div>`;
+        <div class="filter-row">
+          <h3 class="section-title" style="margin:0 12px 0 0">Análise do período</h3>
+          <select id="period" aria-label="Período">
+            ${PERIODS.map(([d, l]) => `<option value="${d}" ${d === days ? "selected" : ""}>${l}</option>`).join("")}
+          </select>
+        </div>
+        <div id="analytics">
+          <div class="tiles" id="tiles"></div>
+          <div class="viz-grid">
+            <div id="trendSlot"></div>
+            <div id="funnelSlot"></div>
+            <div id="channelSlot"></div>
+            <div id="campaignSlot"></div>
+          </div>
+        </div>`;
 
+      document.getElementById("period").addEventListener("change", (e) => {
+        days = Number(e.target.value);
+        try { localStorage.setItem("rafalink_period", String(days)); } catch {}
+        loadAnalytics();
+      });
+
+      // ---- situação atual (não depende do filtro de período) ----
       try {
         const [health, total, novos, qualificados, companies, contacts, opps, tasks] = await Promise.all([
           api("/health"),
@@ -50,7 +80,75 @@
       } catch (err) {
         document.getElementById("cards").innerHTML = card("Status da API", "OFFLINE", "bad");
       }
+
+      loadAnalytics();
     })();
+
+    const CHANNEL_NAME = { ...CHANNEL_LABEL, SEM_CANAL: "Sem canal" };
+
+    async function loadAnalytics() {
+      const box = document.getElementById("analytics");
+      box.classList.add("viz-loading");           // mantém a tela anterior, só esmaece
+      try {
+        renderAnalytics(await api("/reports/overview?days=" + days));
+      } catch (err) {
+        toast(err.message, "err");
+      } finally {
+        box.classList.remove("viz-loading");
+      }
+    }
+
+    function renderAnalytics(r) {
+      const c = r.kpis.current, p = r.kpis.previous;
+      const dash = (v, f) => (v === null || v === undefined ? "—" : f(v));
+      document.getElementById("tiles").innerHTML =
+        statTile("Leads criados", NF.format(c.leads), pctDelta(c.leads, p.leads)) +
+        statTile("Taxa de conversão", NF_1.format(c.conversionRate) + "%", pctDelta(c.conversionRate, p.conversionRate)) +
+        statTile("Receita ganha", fmtMoney(c.revenue), pctDelta(c.revenue, p.revenue)) +
+        statTile("Ticket médio", dash(c.avgTicket, fmtMoney), pctDelta(c.avgTicket, p.avgTicket)) +
+        statTile("Ciclo médio de venda", dash(c.avgCycleDays, (v) => NF_1.format(v) + " dias"), pctDelta(c.avgCycleDays, p.avgCycleDays), false) +
+        statTile("Tempo até 1º contato", dash(c.avgFirstContactHours, (v) => NF_1.format(v) + " h"), pctDelta(c.avgFirstContactHours, p.avgFirstContactHours), false);
+
+      const weekly = r.bucketDays > 1;
+      mountChartCard(document.getElementById("trendSlot"), {
+        id: "trend", wide: true,
+        title: "Leads criados", subtitle: weekly ? "Total por semana" : "Total por dia",
+        render: (b) => lineChart(b, r.leadsSeries, { unit: "leads", bucketDays: r.bucketDays }),
+        columns: [weekly ? "Semana de" : "Dia", "Leads"],
+        rows: r.leadsSeries.map((s) => [fmtDay(s.date), s.value]),
+      });
+
+      const funnel = r.funnel.map((f) => ({ label: STATUS_LABEL[f.status], value: f.count }));
+      mountChartCard(document.getElementById("funnelSlot"), {
+        id: "funnel", title: "Funil de leads",
+        subtitle: `Leads que chegaram a cada etapa · fora do funil: ${r.lostCount} perdidos, ${r.archivedCount} arquivados`,
+        render: (b) => hbarChart(b, funnel, { colors: RAMP }),
+        columns: ["Etapa", "Leads"], rows: funnel.map((f) => [f.label, f.value]),
+      });
+
+      const channels = r.channels.map((x) => ({
+        label: CHANNEL_NAME[x.channel] || x.channel, value: x.leads,
+        tip: `${CHANNEL_NAME[x.channel] || x.channel} · ${x.converted} convertidos (${NF_1.format(x.conversionRate)}%)`,
+      }));
+      mountChartCard(document.getElementById("channelSlot"), {
+        id: "channels", title: "Leads por canal", subtitle: "Criados no período",
+        render: (b) => hbarChart(b, channels),
+        columns: ["Canal", "Leads", "Convertidos", "Conversão"],
+        rows: r.channels.map((x) => [CHANNEL_NAME[x.channel] || x.channel, x.leads, x.converted, NF_1.format(x.conversionRate) + "%"]),
+      });
+
+      const camps = r.campaigns.map((x) => ({
+        label: x.name, value: x.revenue,
+        tip: `${x.name} · ${x.leads} leads no período`,
+      }));
+      mountChartCard(document.getElementById("campaignSlot"), {
+        id: "campaigns", title: "Receita por campanha",
+        subtitle: "Vendas ganhas no período · ROI completo em Campanhas",
+        render: (b) => hbarChart(b, camps, { format: fmtMoney }),
+        columns: ["Campanha", "Leads", "Convertidos", "Receita"],
+        rows: r.campaigns.map((x) => [x.name, x.leads, x.converted, fmtMoney(x.revenue)]),
+      });
+    }
   </script>
 </body>
 </html>
