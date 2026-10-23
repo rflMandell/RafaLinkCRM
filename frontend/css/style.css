@@ -336,3 +336,39 @@ a.btn { text-decoration: none; display: inline-block; }
 .mini-list a { color: var(--text); text-decoration: none; }
 .mini-list a:hover { color: var(--primary); }
 @media (max-width: 720px) { .viz-grid { grid-template-columns: 1fr; } .layout { grid-template-columns: 1fr; } .sidebar { display: none; } }
+
+/* ---------- Forecast, Metas e SLA (Etapa 7) ---------- */
+.viz-tip-row { display: flex; align-items: center; gap: 6px; font-size: .75rem; margin-top: 4px; }
+.viz-tip-key { width: 10px; height: 3px; border-radius: 2px; flex: none; }
+.viz-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 8px; }
+.viz-legend-item { display: inline-flex; align-items: center; gap: 6px; font-size: .78rem; color: var(--muted); }
+.viz-legend-item i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.line-svg .col:hover path, .line-svg .col:focus path { filter: brightness(1.2); }
+.line-svg .col:focus { outline: none; }
+.line-svg .col:focus-visible rect { stroke: var(--primary); stroke-width: 2; }
+.note { color: var(--muted); font-size: .8rem; margin-top: 12px; line-height: 1.5; }
+
+.period-nav { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+.period-nav .label-now { min-width: 190px; text-align: center; font-weight: 600; }
+.goal-section { margin: 22px 0 10px; font-size: .95rem; color: var(--muted); }
+.goal-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+.goal-card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; }
+.goal-card .top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.goal-card .nums { font-size: 1.3rem; font-weight: 700; margin-top: 8px; }
+.goal-card .nums small { color: var(--muted); font-size: .8rem; font-weight: 400; }
+.goal-card .sub { color: var(--muted); font-size: .78rem; margin-top: 8px; }
+.goal-card .btns { display: flex; gap: 8px; margin-top: 12px; }
+.goal-card .btns .btn { padding: 4px 10px; font-size: .8rem; }
+.meter.goal-meter { position: relative; overflow: visible; height: 10px; }
+.meter.goal-meter > span { border-radius: 99px; }
+.meter .pace { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--text); border-radius: 1px; }
+.gs { font-size: .8rem; font-weight: 600; white-space: nowrap; }
+.gs-good { color: var(--ok); } .gs-warn { color: var(--warn); } .gs-bad { color: var(--danger); } .gs-idle { color: var(--muted); }
+.sev-BREACH { background: #7f1d1d; color: #fecaca; }
+.sev-WARNING { background: #78350f; color: #fde68a; }
+.policy-row input[type="number"] { width: 100px; padding: 6px 8px; font-size: .9rem; }
+.policy-row input[type="checkbox"] { width: auto; }
+.card-block { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; margin-top: 14px; }
+.card-block h3 { font-size: .95rem; margin-bottom: 10px; }
+table.grid a { color: var(--primary-hover); text-decoration: none; }
+table.grid a:hover { text-decoration: underline; }

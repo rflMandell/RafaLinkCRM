@@ -53,7 +53,7 @@
 
       // ---- situação atual (não depende do filtro de período) ----
       try {
-        const [health, total, novos, qualificados, companies, contacts, opps, tasks] = await Promise.all([
+        const [health, total, novos, qualificados, companies, contacts, opps, tasks, goals, sla] = await Promise.all([
           api("/health"),
           api("/leads?size=1"),
           api("/leads?size=1&status=NOVO"),
@@ -62,7 +62,11 @@
           api("/contacts?size=1"),
           api("/opportunities/summary"),
           api("/activities/summary"),
+          api("/activities/summary"),
+          api("/goals"),
+          api("/sla"),
         ]);
+        const revGoal = goals.goals.find((g) => g.metric === "REVENUE" && g.ownerId === null);
         document.getElementById("cards").innerHTML =
           card("Status da API", health.status, "ok") +
           card("Seu papel (RBAC)", me.role) +
@@ -76,7 +80,9 @@
           card("Forecast ponderado", fmtMoney(opps.weightedValue)) +
           card("Receita ganha", fmtMoney(opps.wonValue), "ok") +
           card("Minhas tarefas pendentes", tasks.pending) +
-          card("Minhas tarefas atrasadas", tasks.overdue, tasks.overdue > 0 ? "bad" : "");
+          card("Minhas tarefas atrasadas", tasks.overdue, tasks.overdue > 0 ? "bad" : "") +
+          card("Meta de receita do mês", revGoal ? NF_1.format(revGoal.attainment) + "%" : "—") +
+          card("Violações de SLA", sla.totalBreached, sla.totalBreached > 0 ? "bad" : "ok");
       } catch (err) {
         document.getElementById("cards").innerHTML = card("Status da API", "OFFLINE", "bad");
       }

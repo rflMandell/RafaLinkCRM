@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RafaLink CRM - Metas</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="app"></div>
+
+  <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/charts.js"></script>
+  <script>
+    const GOAL_STATUS = {
+      ATINGIDA: ["✓ Atingida", "gs-good", ""],
+      NO_RITMO: ["● No ritmo", "gs-good", ""],
+      EM_RISCO: ["▲ Em risco", "gs-warn", "warn"],
+      ATRASADA: ["▼ Atrasada", "gs-bad", "crit"],
+      NAO_ATINGIDA: ["▼ Não atingida", "gs-bad", "crit"],
+      NAO_INICIADA: ["○ Não iniciada", "gs-idle", ""],
+    };
+    const view = { periodType: "MONTH", periodStart: null };   // periodStart = 1º dia ("AAAA-MM-DD")
+    let opts = { metrics: [], owners: [], canManage: false };
+
+    const isMoney = (metric) => metric === "REVENUE";
+    const fmtVal = (metric, v) => (isMoney(metric) ? fmtMoney(v) : NF.format(v));
+
+    // Navegação por texto (sem Date) para não sofrer com fuso horário
+    function shift(startISO, type, dir) {
+      let [y, m] = startISO.split("-").map(Number);
+      const idx = y * 12 + (m - 1) + dir * (type === "MONTH" ? 1 : 3);
+      return `${Math.floor(idx / 12)}-${String((idx % 12) + 1).padStart(2, "0")}-01`;
+    }
+    function label(startISO, type) {
+      const [y, m] = startISO.split("-").map(Number);
+      if (type === "MONTH") {
+        const t = new Date(y, m - 1, 1).toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+        return t.charAt(0).toUpperCase() + t.slice(1);
+      }
+      return `${Math.ceil(m / 3)}º trimestre de ${y}`;
+    }
+
+    async function init() {
+      const content = renderLayout("goals", "Metas");
+      content.innerHTML = `
+        <div class="page-head"><h2>Metas</h2>
+          <button class="btn btn-primary" id="newBtn" hidden>+ Nova meta</button></div>
+        <div class="period-nav">
+          <select id="ptype" style="width:auto" aria-label="Tipo de período">
+            <option value="MONTH">Mensal</option><option value="QUARTER">Trimestral</option>
+          </select>
+          <button class="btn" id="prev" aria-label="Período anterior">◀</button>
+          <span class="label-now" id="plabel"></span>
+          <button class="btn" id="next" aria-label="Próximo período">▶</button>
+          <button class="btn" id="today">Hoje</button>
+        </div>
+        <div id="list"></div>
+        <p class="note">O traço branco na barra marca onde você deveria estar hoje para fechar a meta no ritmo certo.
+          <strong>No ritmo</strong>: pelo menos 90% do esperado. <strong>Em risco</strong>: entre 60% e 90%. <strong>Atrasada</strong>: abaixo de 60%.
+          A projeção de receita soma o que já foi ganho ao valor ponderado das oportunidades abertas com fechamento previsto no período.</p>`;
+
+      try { opts = await api("/goals/options"); } catch (err) { toast(err.message, "err"); }
+      document.getElementById("newBtn").hidden = !opts.canManage;
+      document.getElementById("newBtn").addEventListener("click", () => openGoalForm());
+      document.getElementById("ptype").addEventListener("change", (e) => { view.periodType = e.target.value; view.periodStart = null; load(); });
+      document.getElementById("prev").addEventListener("click", () => { view.periodStart = shift(view.periodStart, view.periodType, -1); load(); });
+      document.getElementById("next").addEventListener("click", () => { view.periodStart = shift(view.periodStart, view.periodType, 1); load(); });
+      document.getElementById("today").addEventListener("click", () => { view.periodStart = null; load(); });
+      load();
+    }
+
+    async function load() {
+      const p = new URLSearchParams({ periodType: view.periodType });
+      if (view.periodStart) p.set("periodStart", view.periodStart);
+      try {
+        const data = await api("/goals?" + p.toString());
+        view.periodStart = data.periodStart;
+        render(data);
+      } catch (err) { toast(err.message, "err"); }
+    }
+
+    function render(d) {
+      document.getElementById("plabel").textContent = label(d.periodStart, d.periodType);
+      const list = document.getElementById("list");
+      if (!d.goals.length) {
+        list.innerHTML = `<div class="empty">Nenhuma meta neste período.${opts.canManage ? " Clique em “+ Nova meta”." : ""}</div>`;
+        return;
+      }
+      const groups = new Map();
+      d.goals.forEach((g) => {
+        const k = g.ownerId ?? "team";
+        if (!groups.has(k)) groups.set(k, { name: g.ownerId ? g.ownerName : "Equipe", goals: [] });
+        groups.get(k).goals.push(g);
+      });
+      list.innerHTML = [...groups.values()].map((grp) => `
+        <h3 class="goal-section">${esc(grp.name)}</h3>
+        <div class="goal-grid">${grp.goals.map(card).join("")}</div>`).join("");
+
+      list.querySelectorAll("[data-edit]").forEach((b) => b.addEventListener("click", () => openGoalForm(d.goals.find((g) => g.id === Number(b.dataset.edit)))));
+      list.querySelectorAll("[data-del]").forEach((b) => b.addEventListener("click", async () => {
+        if (!confirm("Excluir esta meta?")) return;
+        try { await api("/goals/" + b.dataset.del, { method: "DELETE" }); toast("Meta excluída"); load(); }
+        catch (err) { toast(err.message, "err"); }
+      }));
+    }
+
+    function card(g) {
+      const [text, txtCls, fillCls] = GOAL_STATUS[g.status] || ["", "", ""];
+      const w = Math.min(g.attainment, 100);
+      const proj = g.projected !== null
+        ? `Projeção: ${esc(fmtMoney(g.projected))} (${NF_1.format(g.projectedAttainment)}% da meta)` : "";
+      return `<div class="goal-card">
+        <div class="top"><strong>${esc(g.metricLabel)}</strong><span class="gs ${txtCls}">${text}</span></div>
+        <div class="nums">${esc(fmtVal(g.metric, g.actual))} <small>de ${esc(fmtVal(g.metric, g.target))} · ${NF_1.format(g.attainment)}%</small></div>
+        <div class="meter goal-meter" title="Esperado hoje: ${esc(fmtVal(g.metric, g.expected))}">
+          <span class="${fillCls}" style="width:${w}%"></span>
+          ${g.status !== "NAO_INICIADA" && g.elapsed < 100 ? `<i class="pace" style="left:${g.elapsed}%"></i>` : ""}
+        </div>
+        <div class="sub">Esperado até hoje: ${esc(fmtVal(g.metric, g.expected))}${proj ? "<br>" + proj : ""}</div>
+        ${opts.canManage ? `<div class="btns"><button class="btn" data-edit="${g.id}">Editar alvo</button><button class="btn btn-danger" data-del="${g.id}">Excluir</button></div>` : ""}
+      </div>`;
+    }
+
+    function openGoalForm(goal = null) {
+      const dlg = document.createElement("dialog");
+      dlg.className = "modal";
+      dlg.innerHTML = `
+        <form id="goalForm">
+          <h2>${goal ? "Editar alvo" : "Nova meta"}</h2>
+          <p class="muted">${esc(label(view.periodStart, view.periodType))}</p>
+          ${goal ? `<p><strong>${esc(goal.metricLabel)}</strong> · ${esc(goal.ownerId ? goal.ownerName : "Equipe")}</p>` : `
+          <label>Responsável</label>
+          <select name="ownerId"><option value="">Equipe (todos)</option>${opts.owners.map((o) => `<option value="${o.id}">${esc(o.name)}</option>`).join("")}</select>
+          <label>Métrica</label>
+          <select name="metric">${opts.metrics.map((m) => `<option value="${m.value}">${esc(m.label)}</option>`).join("")}</select>`}
+          <label>Alvo</label>
+          <input name="target" type="number" min="1" step="any" required value="${goal ? goal.target : ""}">
+          <div class="error" id="formError"></div>
+          <div class="modal-actions">
+            <button type="button" class="btn" id="cancelBtn">Cancelar</button>
+            <button type="submit" class="btn btn-primary">Salvar</button>
+          </div>
+        </form>`;
+      document.body.appendChild(dlg);
+      dlg.showModal();
+      dlg.addEventListener("close", () => dlg.remove());
+      dlg.querySelector("#cancelBtn").addEventListener("click", () => dlg.close());
+      dlg.querySelector("#goalForm").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const fd = new FormData(e.target);
+        try {
+          if (goal) await api("/goals/" + goal.id, { method: "PATCH", body: { target: Number(fd.get("target")) } });
+          else await api("/goals", { method: "POST", body: {
+            ownerId: fd.get("ownerId") ? Number(fd.get("ownerId")) : null, metric: fd.get("metric"),
+            periodType: view.periodType, periodStart: view.periodStart, target: Number(fd.get("target")) } });
+          dlg.close(); toast("Meta salva"); load();
+        } catch (err) { dlg.querySelector("#formError").textContent = err.message; }
+      });
+    }
+
+    init();
+  </script>
+</body>
+</html>

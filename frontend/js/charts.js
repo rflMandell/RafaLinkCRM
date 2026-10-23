@@ -8,7 +8,8 @@ const RAMP = ["var(--ramp-1)", "var(--ramp-2)", "var(--ramp-3)", "var(--ramp-4)"
 
 // ----- tooltip único -----
 let tipEl = null;
-function showTip(x, y, value, label) {
+// rows (opcional): [{color, text}] -> linhas extras com um traço da cor da série
+function showTip(x, y, value, label, rows = []) {
   if (!tipEl) {
     tipEl = document.createElement("div");
     tipEl.className = "viz-tip";
@@ -17,7 +18,14 @@ function showTip(x, y, value, label) {
   }
   const v = document.createElement("div"); v.className = "viz-tip-value"; v.textContent = value;
   const l = document.createElement("div"); l.className = "viz-tip-label"; l.textContent = label;
-  tipEl.replaceChildren(v, l);
+  const lines = rows.map((r) => {
+    const line = document.createElement("div"); line.className = "viz-tip-row";
+    const key = document.createElement("span"); key.className = "viz-tip-key"; key.style.background = r.color;
+    const t = document.createElement("span"); t.textContent = r.text;
+    line.append(key, t);
+    return line;
+  });
+  tipEl.replaceChildren(v, l, ...lines);
   tipEl.hidden = false;
   const w = tipEl.offsetWidth, h = tipEl.offsetHeight;
   let left = x + 14; if (left + w > innerWidth - 8) left = x - w - 14;
@@ -181,4 +189,75 @@ function mountChartCard(slot, spec) {
       slot.querySelector(".viz-table").hidden = b.dataset.v !== "table";
     })
   );
+}
+
+// ----- colunas empilhadas (Etapa 7) -----
+function svgEl(name, attrs = {}, text) {
+  const n = document.createElementNS("http://www.w3.org/2000/svg", name);
+  for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+  if (text !== undefined) n.textContent = text;
+  return n;
+}
+// cats: [{label, values:[...]}] na mesma ordem de series: [{name, color}]; o 1º valor fica na base.
+function stackedColumnChart(box, cats, series, { format = (v) => fmtMoney(v), unit = "" } = {}) {
+  box.replaceChildren();
+  const legend = document.createElement("div"); legend.className = "viz-legend";
+  series.forEach((s) => {
+    const item = document.createElement("span"); item.className = "viz-legend-item";
+    const sw = document.createElement("i"); sw.style.background = s.color;
+    const tx = document.createElement("span"); tx.textContent = s.name;
+    item.append(sw, tx); legend.appendChild(item);
+  });
+  box.appendChild(legend);
+
+  const totals = cats.map((c) => c.values.reduce((a, b) => a + b, 0));
+  if (!cats.length || Math.max(...totals) <= 0) {
+    box.insertAdjacentHTML("beforeend", `<div class="empty">Sem dados no período.</div>`);
+    return;
+  }
+  const W = 720, H = 270, L = 58, R = 12, T = 24, B = 30, GAP = 2;
+  const ticks = axisTicks(Math.max(...totals)), top = ticks[ticks.length - 1];
+  const y = (v) => T + (H - T - B) * (1 - v / top);
+  const band = (W - L - R) / cats.length, bw = Math.min(24, band * 0.6);
+  const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, class: "line-svg", role: "img",
+    "aria-label": "Colunas empilhadas por período. Os mesmos valores estão na visão Tabela." });
+
+  ticks.forEach((t) => {
+    svg.appendChild(svgEl("line", { class: "grid-line", x1: L, x2: W - R, y1: y(t), y2: y(t) }));
+    svg.appendChild(svgEl("text", { x: L - 8, y: y(t) + 4, "text-anchor": "end" }, NF_COMPACT.format(t)));
+  });
+
+  cats.forEach((c, i) => {
+    const cx = L + band * i + band / 2, g = svgEl("g", { class: "col", tabindex: 0 });
+    let acc = 0, firstDone = false;
+    const lastIdx = c.values.reduce((a, v, j) => (v > 0 ? j : a), -1);
+    c.values.forEach((v, j) => {
+      if (v <= 0) return;
+      const y1 = y(acc + v), h = y(acc) - y1, isTop = j === lastIdx;
+      const hh = Math.max(h - (firstDone ? GAP : 0), 1);   // 2px de respiro entre segmentos
+      const x0 = cx - bw / 2, r = Math.min(4, hh, bw / 2);
+      const d = isTop
+        ? `M${x0},${y1 + hh}V${y1 + r}Q${x0},${y1} ${x0 + r},${y1}H${x0 + bw - r}Q${x0 + bw},${y1} ${x0 + bw},${y1 + r}V${y1 + hh}Z`
+        : `M${x0},${y1}H${x0 + bw}V${y1 + hh}H${x0}Z`;
+      g.appendChild(svgEl("path", { d, fill: series[j].color }));
+      firstDone = true; acc += v;
+    });
+    g.appendChild(svgEl("text", { class: "end-label", x: cx, y: y(totals[i]) - 7, "text-anchor": "middle" },
+      totals[i] > 0 ? NF_COMPACT.format(totals[i]) : ""));
+    g.appendChild(svgEl("text", { x: cx, y: H - 8, "text-anchor": "middle" }, c.label));
+    const hit = svgEl("rect", { x: cx - band / 2, y: T, width: band, height: H - T - B, fill: "transparent" });
+    g.appendChild(hit);
+
+    const show = (e) => {
+      const r = hit.getBoundingClientRect();
+      const rows = c.values.map((v, j) => ({ color: series[j].color, text: `${series[j].name}: ${format(v)}` })).filter((_, j) => c.values[j] > 0);
+      showTip(e.clientX ?? r.left + r.width / 2, e.clientY ?? r.top, format(totals[i]) + unit, c.label, rows);
+    };
+    g.addEventListener("pointermove", show);
+    g.addEventListener("focus", show);
+    g.addEventListener("pointerleave", hideTip);
+    g.addEventListener("blur", hideTip);
+    svg.appendChild(g);
+  });
+  box.appendChild(svg);
 }

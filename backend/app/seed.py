@@ -4,6 +4,7 @@ from .database import get_conn, now_iso
 from .security import hash_password
 from .services import DEFAULT_STAGES, create_pipeline
 from .seed_campaigns import seed_campaigns
+from .seed_goals import seed_goals
 
 # Usuários de demonstração (um por papel). Senhas simples de propósito, só para uso local.
 DEMO_USERS = [
@@ -283,5 +284,6 @@ def seed() -> None:
         print("[seed] atividades de demonstração criadas")
     
     seed_campaigns(conn)
+    seed_goals(conn)
     
     conn.close()

@@ -8,8 +8,8 @@ from fastapi.staticfiles import StaticFiles
 from .database import run_migrations
 from .errors import register_error_handlers
 from .routers import (
-    activities, auth, campaigns, companies, contacts, customers, leads,
-    opportunities, pipelines, reports,
+    activities, auth, campaigns, companies, contacts, customers, forecast, goals, leads,
+    opportunities, pipelines, reports, sla,
 )
 from .seed import seed
 
@@ -60,6 +60,9 @@ api_v1.include_router(activities.tasks_router)
 api_v1.include_router(customers.router)
 api_v1.include_router(campaigns.router)
 api_v1.include_router(reports.router)
+api_v1.include_router(forecast.router)
+api_v1.include_router(goals.router)
+api_v1.include_router(sla.router)
 app.include_router(api_v1)
 
 # O backend também serve o frontend: tudo em http://localhost:8000

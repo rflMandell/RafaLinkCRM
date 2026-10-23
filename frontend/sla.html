@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RafaLink CRM - SLA</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="app"></div>
+
+  <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/charts.js"></script>
+  <script>
+    let owner = "";
+    let ownersReady = false;
+    const SEV = { BREACH: "Violação", WARNING: "Atenção" };
+    const href = (i) => (i.entity === "lead" ? "lead.html?id=" : "opportunity.html?id=") + i.entityId;
+    const unitFmt = (v, unit) => `${NF_1.format(v)} ${unit}`;
+
+    async function init() {
+      const content = renderLayout("sla", "SLA");
+      content.innerHTML = `
+        <div class="page-head"><h2>SLA e prazos de atendimento</h2></div>
+        <div class="filter-row" style="margin-top:0">
+          <select id="fowner" aria-label="Responsável"><option value="">Todos os responsáveis</option></select>
+        </div>
+        <div id="board"></div>`;
+      document.getElementById("fowner").addEventListener("change", (e) => { owner = e.target.value; load(); });
+      load();
+    }
+
+    async function load() {
+      const board = document.getElementById("board");
+      board.classList.add("viz-loading");
+      try {
+        const d = await api("/sla" + (owner ? "?owner=" + owner : ""));
+        if (!ownersReady) {
+          ownersReady = true;
+          document.getElementById("fowner").insertAdjacentHTML("beforeend",
+            d.owners.map((o) => `<option value="${o.id}">${esc(o.name)}</option>`).join(""));
+        }
+        render(d);
+      } catch (err) { toast(err.message, "err"); }
+      finally { board.classList.remove("viz-loading"); }
+    }
+
+    function render(d) {
+      const tiles = d.policies.map((p) => {
+        const s = d.summary[p.kind];
+        const body = !p.active
+          ? `<div class="value">—</div><div class="delta">Política desativada</div>`
+          : `<div class="value ${s.breached ? "bad" : "ok"}">${s.breached} ${s.breached === 1 ? "violação" : "violações"}</div>
+             <div class="delta">${s.compliance === null ? "Sem itens monitorados" : `Cumprimento ${NF_1.format(s.compliance)}% · ${s.monitored} monitorados`}${s.warning ? ` · ${s.warning} em atenção` : ""}</div>`;
+        return `<div class="tile"><div class="label">${esc(p.label)}</div>${body}</div>`;
+      }).join("");
+
+      const policyRows = d.policies.map((p) => `
+        <tr class="policy-row" data-kind="${p.kind}">
+          <td>${esc(p.label)}<div class="muted">${p.entity === "lead" ? "Leads" : "Oportunidades abertas"}</div></td>
+          <td>${d.canManage
+            ? `<input type="number" min="1" step="any" value="${p.threshold}" aria-label="Prazo de ${esc(p.label)}"> ${esc(p.unit)}`
+            : `${NF_1.format(p.threshold)} ${esc(p.unit)}`}</td>
+          <td>${d.canManage ? `<label style="margin:0;display:flex;gap:6px;align-items:center"><input type="checkbox" ${p.active ? "checked" : ""}> Ativa</label>` : (p.active ? "Ativa" : "Desativada")}</td>
+          ${d.canManage ? `<td><button class="btn" data-save="${p.kind}">Salvar</button></td>` : ""}
+        </tr>`).join("");
+
+      const rows = d.items.length ? `
+        <table class="grid"><thead><tr><th>Situação</th><th>Item</th><th>Regra</th><th>Responsável</th>
+          <th class="num">Tempo</th><th class="num">Prazo</th></tr></thead><tbody>
+          ${d.items.map((i) => `<tr>
+            <td><span class="badge sev-${i.severity}">${SEV[i.severity]}</span></td>
+            <td><a href="${href(i)}">${esc(i.name)}</a></td>
+            <td>${esc(d.policies.find((p) => p.kind === i.kind).label)}</td>
+            <td>${esc(i.ownerName || "—")}</td>
+            <td class="num">${esc(unitFmt(i.age, i.unit))}</td>
+            <td class="num">${esc(unitFmt(i.threshold, i.unit))}</td></tr>`).join("")}
+        </tbody></table>` : `<div class="empty">Nenhum item fora do prazo. Tudo em dia.</div>`;
+
+      document.getElementById("board").innerHTML = `
+        <div class="tiles">${tiles}</div>
+        <div class="card-block"><h3>Itens fora do prazo (${d.totalBreached} violações, ${d.totalWarning} em atenção)</h3>${rows}</div>
+        <div class="card-block"><h3>Políticas</h3>
+          <table class="grid"><thead><tr><th>Regra</th><th>Prazo</th><th>Estado</th>${d.canManage ? "<th></th>" : ""}</tr></thead><tbody>${policyRows}</tbody></table>
+          <p class="note">“Atenção” aparece quando o item já usou 75% do prazo. O “primeiro contato” conta os leads dos últimos 30 dias: contatados dentro do prazo ÷ (dentro + fora do prazo).
+            Nas outras regras, o cumprimento é a parcela de itens monitorados que ainda está dentro do prazo. Os alertas automáticos chegam na Etapa 9.</p>
+        </div>`;
+
+      document.querySelectorAll("[data-save]").forEach((b) => b.addEventListener("click", async () => {
+        const row = b.closest("tr");
+        try {
+          await api("/sla/policies/" + b.dataset.save, { method: "PUT", body: {
+            threshold: Number(row.querySelector("input[type=number]").value),
+            active: row.querySelector("input[type=checkbox]").checked } });
+          toast("Política atualizada"); load();
+        } catch (err) { toast(err.message, "err"); }
+      }));
+    }
+
+    init();
+  </script>
+</body>
+</html>

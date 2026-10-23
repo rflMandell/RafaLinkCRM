@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RafaLink CRM - Forecast</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="app"></div>
+
+  <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/charts.js"></script>
+  <script>
+    const state = { months: 6, owner: "", pipeline: "" };
+    let filtersReady = false;
+
+    const SERIES = [
+      { key: "won", name: "Já ganho", color: "var(--ramp-1)" },
+      { key: "commit", name: "Commit (≥ 80%)", color: "var(--ramp-2)" },
+      { key: "bestCase", name: "Best case (40–79%)", color: "var(--ramp-3)" },
+      { key: "pipeline", name: "Pipeline (< 40%)", color: "var(--ramp-4)" },
+    ];
+
+    function periodLabel(m) {
+      if (m.kind === "overdue") return "Atrasadas";
+      if (m.kind === "later") return "Depois";
+      if (m.kind === "nodate") return "Sem data";
+      const [y, mm] = m.key.split("-");
+      const name = new Date(Number(y), Number(mm) - 1, 1).toLocaleDateString("pt-BR", { month: "short" }).replace(".", "");
+      return `${name}/${y.slice(2)}`;
+    }
+
+    async function init() {
+      const content = renderLayout("forecast", "Forecast");
+      content.innerHTML = `
+        <div class="page-head"><h2>Forecast de receita</h2></div>
+        <div class="filter-row" style="margin-top:0">
+          <select id="fmonths" aria-label="Horizonte">
+            <option value="3">Próximos 3 meses</option>
+            <option value="6" selected>Próximos 6 meses</option>
+            <option value="12">Próximos 12 meses</option>
+          </select>
+          <select id="fowner" aria-label="Responsável"><option value="">Todos os responsáveis</option></select>
+          <select id="fpipeline" aria-label="Pipeline"><option value="">Todos os pipelines</option></select>
+        </div>
+        <div id="board"></div>`;
+      const bind = (id, key) => document.getElementById(id).addEventListener("change", (e) => { state[key] = e.target.value; load(); });
+      bind("fmonths", "months"); bind("fowner", "owner"); bind("fpipeline", "pipeline");
+      load();
+    }
+
+    async function load() {
+      const board = document.getElementById("board");
+      board.classList.add("viz-loading");
+      const p = new URLSearchParams({ months: state.months });
+      if (state.owner) p.set("owner", state.owner);
+      if (state.pipeline) p.set("pipeline", state.pipeline);
+      try {
+        const data = await api("/forecast?" + p.toString());
+        if (!filtersReady) {
+          filtersReady = true;
+          const fill = (id, items) => document.getElementById(id).insertAdjacentHTML("beforeend",
+            items.map((i) => `<option value="${i.id}">${esc(i.name)}</option>`).join(""));
+          fill("fowner", data.filters.owners); fill("fpipeline", data.filters.pipelines);
+        }
+        render(data);
+      } catch (err) { toast(err.message, "err"); }
+      finally { board.classList.remove("viz-loading"); }
+    }
+
+    function render(d) {
+      const s = d.scenarios;
+      const pctGoal = d.monthGoal ? (s.expected / d.monthGoal) * 100 : null;
+      const tile = (label, value, sub) => `<div class="tile"><div class="label">${esc(label)}</div><div class="value">${esc(value)}</div><div class="delta">${esc(sub)}</div></div>`;
+
+      const cats = d.months.map((m) => ({
+        label: periodLabel(m),
+        values: [m.won, m.weighted.commit, m.weighted.bestCase, m.weighted.pipeline],
+      }));
+      const rows = d.months.map((m) => [
+        periodLabel(m), fmtMoney(m.won), fmtMoney(m.weighted.commit), fmtMoney(m.weighted.bestCase),
+        fmtMoney(m.weighted.pipeline), fmtMoney(m.weightedTotal + m.won), fmtMoney(m.openValue), m.count,
+      ]);
+
+      document.getElementById("board").innerHTML = `
+        <div class="tiles">
+          ${tile("Já ganho no mês", fmtMoney(d.wonThisMonth), "Vendas fechadas neste mês")}
+          ${tile("Cenário conservador", fmtMoney(s.conservative), "Ganhos + Commit ponderado")}
+          ${tile("Cenário provável", fmtMoney(s.expected), "Ganhos + tudo ponderado pela probabilidade")}
+          ${tile("Cenário otimista", fmtMoney(s.optimistic), "Ganhos + Commit e Best case pelo valor cheio")}
+          ${tile("Meta de receita do mês", d.monthGoal ? fmtMoney(d.monthGoal) : "—",
+              pctGoal === null ? "Sem meta da equipe neste mês" : `Cenário provável = ${NF_1.format(pctGoal)}% da meta`)}
+        </div>
+        <div class="viz-grid"><div id="fcSlot"></div></div>
+        <div class="card-block">
+          <h3>Por responsável</h3>
+          ${d.owners.length ? `<table class="grid"><thead><tr><th>Responsável</th><th class="num">Abertas</th><th class="num">Valor aberto</th>
+            <th class="num">Ponderado</th><th class="num">Commit</th><th class="num">Ganho no mês</th></tr></thead><tbody>
+            ${d.owners.map((o) => `<tr><td>${esc(o.ownerName)}</td><td class="num">${o.openCount}</td><td class="num">${esc(fmtMoney(o.openValue))}</td>
+              <td class="num">${esc(fmtMoney(o.weighted))}</td><td class="num">${esc(fmtMoney(o.commit))}</td><td class="num">${esc(fmtMoney(o.wonMonth))}</td></tr>`).join("")}
+            </tbody></table>` : `<div class="empty">Nenhuma oportunidade no filtro escolhido.</div>`}
+        </div>
+        <p class="note">Cada oportunidade aberta entra no mês da <strong>data de fechamento esperada</strong>, com o valor multiplicado pela probabilidade da etapa.
+          “Atrasadas” são oportunidades com data anterior ao mês atual e “Sem data” ainda não têm previsão. Ajuste as datas no Pipeline para o forecast ficar fiel.</p>`;
+
+      mountChartCard(document.getElementById("fcSlot"), {
+        id: "forecast", wide: true,
+        title: "Receita prevista por mês de fechamento",
+        subtitle: "Valor ponderado pela probabilidade da etapa, dividido por nível de confiança",
+        render: (box) => stackedColumnChart(box, cats, SERIES),
+        columns: ["Período", "Já ganho", "Commit", "Best case", "Pipeline", "Previsto", "Valor aberto", "Qtd."],
+        rows,
+      });
+    }
+
+    init();
+  </script>
+</body>
+</html>

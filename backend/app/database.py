@@ -7,7 +7,7 @@ DB_PATH = Path(__file__).resolve().parent.parent / "data" / "rafalink.db"
 
 def get_conn() -> sqlite3.Connection:
     DB_PATH.parent.mkdir(exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
@@ -276,6 +276,38 @@ MIGRATIONS = [
         UPDATE leads SET first_contact_at = last_interaction_at WHERE last_interaction_at IS NOT NULL;
         CREATE INDEX idx_leads_campaign ON leads(campaign_id);
         CREATE INDEX idx_opps_campaign ON opportunities(campaign_id);
+        """,
+    ),
+    (
+        "V16__create_goals",
+        """
+        CREATE TABLE goals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            organization_id INTEGER NOT NULL REFERENCES organizations(id),
+            owner_id INTEGER REFERENCES users(id),
+            metric TEXT NOT NULL,
+            period_type TEXT NOT NULL,
+            period_start TEXT NOT NULL,
+            target REAL NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE UNIQUE INDEX uq_goals_scope
+            ON goals(organization_id, COALESCE(owner_id, 0), metric, period_type, period_start);
+        """,
+    ),
+    (
+        "V17__create_sla_policies",
+        """
+        CREATE TABLE sla_policies (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            organization_id INTEGER NOT NULL REFERENCES organizations(id),
+            kind TEXT NOT NULL,
+            threshold REAL NOT NULL,
+            active INTEGER NOT NULL DEFAULT 1,
+            updated_at TEXT NOT NULL,
+            UNIQUE (organization_id, kind)
+        );
         """,
     ),
 ]

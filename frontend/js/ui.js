@@ -23,7 +23,9 @@ const MENU = [
   { key: "agenda", label: "Agenda", href: "agenda.html" },
   { key: "activities", label: "Atividades", href: "activities.html" },
   { key: "campaigns", label: "Campanhas", href: "campaigns.html" },
-  { key: "forecast", label: "Forecast", stage: 7 },
+  { key: "forecast", label: "Forecast", href: "forecast.html" },
+  { key: "goals", label: "Metas", href: "goals.html" },
+  { key: "sla", label: "SLA", href: "sla.html" },
   { key: "settings", label: "Configurações", stage: 10 },
 ];
 
