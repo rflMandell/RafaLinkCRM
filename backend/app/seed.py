@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 from .database import get_conn, now_iso
 from .security import hash_password
+from .services import DEFAULT_STAGES, create_pipeline
 
 # Usuários de demonstração (um por papel). Senhas simples de propósito, só para uso local.
 DEMO_USERS = [
@@ -46,6 +47,28 @@ DEMO_CONTACTS = [
     ("Marcelo Tavares", "TI", "marcelo@vidaplena.com.br", "11988880006", "Clínica Vida Plena", "WHATSAPP"),
     ("Sandra Lopes", "Coordenadora", "sandra@novosaber.edu.br", "11988880007", "Escola Novo Saber", "EMAIL"),
     ("Paulo Mendes", "Proprietário", None, "11988880008", "Mercado Bom Preço", "TELEFONE"),
+]
+
+RENEWAL_STAGES = [
+    ("Em análise", 30, "OPEN"),
+    ("Proposta", 60, "OPEN"),
+    ("Aprovação", 85, "OPEN"),
+    ("Renovado", 100, "WON"),
+    ("Não renovado", 0, "LOST"),
+]
+
+# título, valor, pipeline, etapa, empresa, contato, dias até o fechamento, motivo da perda
+DEMO_OPPORTUNITIES = [
+    ("Contrato de Software", 80000, "Vendas", "Proposta", "Empresa XYZ", "Patrícia Nunes", 40, None),
+    ("Licenças Corporativas", 45000, "Vendas", "Negociação", "Empresa XYZ", "André Almeida", 20, None),
+    ("Reforma da Sede", 250000, "Vendas", "Reunião", "Construtora Horizonte", "Roberto Campos", 60, None),
+    ("Plano de Saúde Corporativo", 32000, "Vendas", "Qualificado", "Clínica Vida Plena", "Helena Duarte", 35, None),
+    ("Sistema de Gestão Escolar", 58000, "Vendas", "Proposta", "Escola Novo Saber", "Sandra Lopes", 45, None),
+    ("Totem de Autoatendimento", 18500, "Vendas", "Novo Lead", "Mercado Bom Preço", "Paulo Mendes", 50, None),
+    ("Expansão da Loja Online", 27000, "Vendas", "Novo Lead", "Bela Flor", "Juliana Martins", 30, None),
+    ("Contrato Anual Bela Flor", 40000, "Vendas", "Ganho", "Bela Flor", "Juliana Martins", 0, None),
+    ("Pacote de Treinamento", 12000, "Vendas", "Perdido", "Escola Novo Saber", "Sandra Lopes", 0, "Orçamento cortado"),
+    ("Renovação Clínica Vida Plena", 22000, "Renovações", "Proposta", "Clínica Vida Plena", "Marcelo Tavares", 25, None),
 ]
 
 
@@ -132,4 +155,68 @@ def seed() -> None:
         conn.commit()
         print("[seed] empresas e contatos de demonstração criados")
 
+    org_id = conn.execute("SELECT id FROM organizations ORDER BY id LIMIT 1").fetchone()["id"]
+
+    if conn.execute("SELECT COUNT(*) FROM pipelines").fetchone()[0] == 0:
+        create_pipeline(conn, org_id, "Vendas", DEFAULT_STAGES, is_default=True)
+        create_pipeline(conn, org_id, "Renovações", RENEWAL_STAGES)
+        conn.commit()
+        print("[seed] pipelines de demonstração criados")
+
+    if conn.execute("SELECT COUNT(*) FROM opportunities").fetchone()[0] == 0:
+        owner_ids = [
+            r["id"]
+            for r in conn.execute(
+                "SELECT id FROM users WHERE organization_id = ? ORDER BY id", (org_id,)
+            )
+        ]
+        now = datetime.now(timezone.utc)
+        status_by_kind = {"OPEN": "ABERTA", "WON": "GANHA", "LOST": "PERDIDA"}
+
+        for i, (title, value, pipeline, stage_name, company, contact, days, reason) in enumerate(DEMO_OPPORTUNITIES):
+            stage = conn.execute(
+                "SELECT s.id, s.name, s.pipeline_id, s.probability, s.kind FROM pipeline_stages s "
+                "JOIN pipelines p ON p.id = s.pipeline_id "
+                "WHERE p.organization_id = ? AND p.name = ? AND s.name = ?",
+                (org_id, pipeline, stage_name),
+            ).fetchone()
+            if stage is None:
+                continue
+            company_row = conn.execute(
+                "SELECT id FROM companies WHERE organization_id = ? AND name = ?", (org_id, company)
+            ).fetchone()
+            contact_row = conn.execute(
+                "SELECT id FROM contacts WHERE organization_id = ? AND name = ?", (org_id, contact)
+            ).fetchone()
+
+            kind = stage["kind"]
+            owner = owner_ids[i % len(owner_ids)]
+            changed = (now - timedelta(days=i * 3 + 1)).isoformat(timespec="seconds")
+            closed = changed if kind != "OPEN" else None
+            close_date = (now + timedelta(days=days)).date().isoformat() if kind == "OPEN" else None
+
+            cur = conn.execute(
+                "INSERT INTO opportunities(organization_id, title, value, probability, status, pipeline_id, "
+                "stage_id, company_id, contact_id, owner_id, expected_close_date, realized_value, "
+                "lost_reason, closed_at, stage_changed_at, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    org_id, title, value, stage["probability"], status_by_kind[kind],
+                    stage["pipeline_id"], stage["id"],
+                    company_row["id"] if company_row else None,
+                    contact_row["id"] if contact_row else None,
+                    owner, close_date,
+                    value if kind == "WON" else None,
+                    reason if kind == "LOST" else None,
+                    closed, changed, changed, changed,
+                ),
+            )
+            conn.execute(
+                "INSERT INTO opportunity_history(opportunity_id, user_id, from_stage, to_stage, "
+                "probability, note, created_at) VALUES (?, ?, NULL, ?, ?, 'Oportunidade criada', ?)",
+                (cur.lastrowid, owner, stage["name"], stage["probability"], changed),
+            )
+        conn.commit()
+        print("[seed] oportunidades de demonstração criadas")
+    
     conn.close()

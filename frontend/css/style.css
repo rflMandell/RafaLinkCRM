@@ -165,3 +165,40 @@ textarea:focus { outline: 2px solid var(--primary); border-color: transparent; }
 .ty-CLIENTE { background: #14532d; color: #86efac; }
 .ct-ATIVO { background: #14532d; color: #86efac; }
 .ct-INATIVO { background: #334155; color: #cbd5e1; }
+
+/* ---------- Componentes (Etapa 4) ---------- */
+.os-ABERTA { background: #1e3a8a; color: #bfdbfe; }
+.os-GANHA { background: #14532d; color: #86efac; }
+.os-PERDIDA { background: #7f1d1d; color: #fecaca; }
+
+.board { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 12px; align-items: flex-start; }
+.column {
+  flex: 0 0 270px; display: flex; flex-direction: column; max-height: calc(100vh - 300px);
+  background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+}
+.column.drag-over { border-color: var(--primary); background: rgba(99, 102, 241, .1); }
+.column.won { border-top: 3px solid var(--ok); }
+.column.lost { border-top: 3px solid var(--danger); }
+.column-head { padding: 12px 14px; border-bottom: 1px solid var(--border); }
+.column-head .name { display: flex; justify-content: space-between; font-weight: 600; }
+.column-head .sum { color: var(--muted); font-size: .8rem; margin-top: 4px; }
+.column-body { padding: 10px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; min-height: 90px; }
+
+.opp-card {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+  padding: 10px 12px; cursor: grab;
+}
+.opp-card:hover { border-color: var(--primary); }
+.opp-card.dragging { opacity: .35; }
+.opp-card.closed { cursor: pointer; opacity: .85; }
+.opp-card .t { font-weight: 600; font-size: .9rem; }
+.opp-card .v { font-weight: 700; margin-top: 6px; }
+.opp-card .m { color: var(--muted); font-size: .75rem; margin-top: 4px; }
+.opp-card .stale { color: #fbbf24; }
+
+.timeline { list-style: none; border-left: 2px solid var(--border); margin-left: 6px; }
+.timeline li { position: relative; padding: 0 0 16px 18px; }
+.timeline li::before {
+  content: ""; position: absolute; left: -6px; top: 5px; width: 10px; height: 10px;
+  border-radius: 50%; background: var(--primary);
+}

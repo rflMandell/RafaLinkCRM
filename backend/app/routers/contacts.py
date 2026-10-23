@@ -223,6 +223,7 @@ def delete_contact(
     user=Depends(require_roles("ADMIN", "SALES_MANAGER")),
 ):
     contact = _get_contact(db, user, contact_id)
+    db.execute("UPDATE opportunities SET contact_id = NULL WHERE contact_id = ?", (contact_id,))
     db.execute("UPDATE leads SET contact_id = NULL WHERE contact_id = ?", (contact_id,))
     db.execute("DELETE FROM contacts WHERE id = ?", (contact_id,))
     publish(db, user, "ContactDeleted", "contact", contact_id, {"name": contact["name"]})

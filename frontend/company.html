@@ -13,6 +13,7 @@
   <script src="js/ui.js"></script>
   <script src="js/company-form.js"></script>
   <script src="js/contact-form.js"></script>
+  <script src="js/opportunity-form.js"></script>
   <script>
     const companyId = new URLSearchParams(location.search).get("id");
     const content = renderLayout("companies", "Detalhe da empresa");
@@ -41,6 +42,22 @@
                 </tr>`).join("")}
             </tbody>
           </table>`;
+      
+      const oppsHtml = c.opportunities.length === 0
+        ? `<div class="empty">Nenhuma oportunidade para esta empresa ainda.</div>`
+        : `<table class="grid">
+            <thead><tr><th>Oportunidade</th><th>Etapa</th><th>Valor</th><th>Probabilidade</th><th>Status</th></tr></thead>
+            <tbody>
+              ${c.opportunities.map((o) => `
+                <tr class="clickable" data-opp="${o.id}">
+                  <td><strong>${esc(o.title)}</strong></td>
+                  <td>${esc(o.stageName)}</td>
+                  <td>${fmtMoney(o.value)}</td>
+                  <td>${o.probability}%</td>
+                  <td>${oppStatusBadge(o.status)}</td>
+                </tr>`).join("")}
+            </tbody>
+          </table>`;
 
       content.innerHTML = `
         <p><a href="companies.html" class="muted">← Voltar para empresas</a></p>
@@ -50,6 +67,7 @@
         </div>
         <div class="actions">
           <button class="btn btn-primary" id="newContactBtn">+ Novo contato</button>
+          <button class="btn btn-primary" id="newOppBtn">+ Nova oportunidade</button>
           <button class="btn" id="editBtn">Editar</button>
           ${canDelete() ? `<button class="btn btn-danger" id="deleteBtn">Excluir</button>` : ""}
         </div>
@@ -65,8 +83,8 @@
         <h3 class="section-title">Contatos (${c.contacts.length})</h3>
         ${contactsHtml}
 
-        <h3 class="section-title">Oportunidades</h3>
-        <div class="empty">As oportunidades desta empresa aparecem aqui a partir da Etapa 4.</div>`;
+        <h3 class="section-title">Oportunidades (${c.opportunities.length})</h3>
+        ${oppsHtml}`;
 
       content.querySelectorAll("tr[data-contact]").forEach((row) =>
         row.addEventListener("click", () => (location.href = "contact.html?id=" + row.dataset.contact))
@@ -84,6 +102,19 @@
           companies: opts.companies,
           defaults: { companyId: c.id },
           onSaved: () => load(),
+        });
+      });
+
+      content.querySelectorAll("tr[data-opp]").forEach((row) =>
+        row.addEventListener("click", () => (location.href = "opportunity.html?id=" + row.dataset.opp))
+      );
+
+      document.getElementById("newOppBtn").addEventListener("click", async () => {
+        const opts = await api("/opportunities/options");
+        openOpportunityForm({
+          options: opts,
+          defaults: { companyId: c.id },
+          onSaved: (o) => (location.href = "opportunity.html?id=" + o.id),
         });
       });
 

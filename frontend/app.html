@@ -23,13 +23,14 @@
         `<div class="card"><div class="label">${label}</div><div class="value ${cls}">${esc(value)}</div></div>`;
 
       try {
-        const [health, total, novos, qualificados, companies, contacts] = await Promise.all([
+        const [health, total, novos, qualificados, companies, contacts, opps] = await Promise.all([
           api("/health"),
           api("/leads?size=1"),
           api("/leads?size=1&status=NOVO"),
           api("/leads?size=1&status=QUALIFICADO"),
           api("/companies?size=1"),
           api("/contacts?size=1"),
+          api("/opportunities/summary"),
         ]);
         document.getElementById("cards").innerHTML =
           card("Status da API", health.status, "ok") +
@@ -38,13 +39,11 @@
           card("Leads novos", novos.totalElements) +
           card("Leads qualificados", qualificados.totalElements) +
           card("Empresas", companies.totalElements) +
-          card("Contatos", contacts.totalElements);
-        document.getElementById("cards").innerHTML =
-          card("Status da API", health.status, "ok") +
-          card("Seu papel (RBAC)", me.role) +
-          card("Total de leads", total.totalElements) +
-          card("Leads novos", novos.totalElements) +
-          card("Leads qualificados", qualificados.totalElements);
+          card("Contatos", contacts.totalElements) +
+          card("Oportunidades abertas", opps.openCount) +
+          card("Pipeline aberto", fmtMoney(opps.openValue)) +
+          card("Forecast ponderado", fmtMoney(opps.weightedValue)) +
+          card("Receita ganha", fmtMoney(opps.wonValue), "ok");
       } catch (err) {
         document.getElementById("cards").innerHTML = card("Status da API", "OFFLINE", "bad");
       }

@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RafaLink CRM - Oportunidade</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="app"></div>
+
+  <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/opportunity-form.js"></script>
+  <script>
+    const oppId = new URLSearchParams(location.search).get("id");
+    const content = renderLayout("pipeline", "Detalhe da oportunidade");
+
+    async function load() {
+      try {
+        render(await api("/opportunities/" + oppId));
+      } catch (err) {
+        content.innerHTML = `<p class="bad">${esc(err.message)}</p><p><a class="link" href="pipeline.html">← Voltar para o pipeline</a></p>`;
+      }
+    }
+
+    function render(o) {
+      const closed = o.status !== "ABERTA";
+      const current = o.stages.find((s) => s.id === o.stageId);
+
+      let stepper;
+      if (o.status === "PERDIDA") {
+        stepper = `<div class="stepper">${oppStatusBadge("PERDIDA")}
+          ${o.lostReason ? `<span class="muted">Motivo: ${esc(o.lostReason)}</span>` : ""}</div>`;
+      } else {
+        stepper = `<div class="stepper">
+          ${o.stages.filter((s) => s.kind === "OPEN").map((s) =>
+            `<span class="step ${s.position < current.position ? "done" : s.id === o.stageId ? "current" : ""}">${esc(s.name)}</span>`
+          ).join("")}
+          ${o.status === "GANHA" ? oppStatusBadge("GANHA") : ""}</div>`;
+      }
+
+      const actions = closed
+        ? `<button class="btn btn-primary" id="reopenBtn">Reabrir</button>`
+        : o.stages.filter((s) => s.id !== o.stageId).map((s) => {
+            const cls = s.kind === "WON" ? "btn-primary" : s.kind === "LOST" ? "btn-danger" : "";
+            const label = s.kind === "WON" ? "Marcar como ganha"
+              : s.kind === "LOST" ? "Marcar como perdida" : "Mover para " + s.name;
+            return `<button class="btn ${cls}" data-stage="${s.id}">${esc(label)}</button>`;
+          }).join("") + `<button class="btn" id="editBtn">Editar</button>`;
+
+      content.innerHTML = `
+        <p><a href="pipeline.html" class="muted">← Voltar para o pipeline</a></p>
+        <div class="page-head">
+          <div><h2>${esc(o.title)}</h2><div class="muted">${esc(o.pipelineName)} · ${esc(o.stageName)}</div></div>
+          ${oppStatusBadge(o.status)}
+        </div>
+        ${stepper}
+        <div class="actions">${actions}${canDelete() ? `<button class="btn btn-danger" id="deleteBtn">Excluir</button>` : ""}</div>
+        <div class="detail-grid">
+          ${infoCard("Valor", fmtMoney(o.value))}
+          ${infoCard("Probabilidade", o.probability + "%")}
+          ${o.status === "GANHA" ? infoCard("Valor realizado", fmtMoney(o.realizedValue)) : infoCard("Forecast ponderado", fmtMoney(o.weightedValue))}
+          ${o.companyId ? linkCard("Empresa", "company.html?id=" + o.companyId, o.companyName) : infoCard("Empresa", "")}
+          ${o.contactId ? linkCard("Contato", "contact.html?id=" + o.contactId, o.contactName) : infoCard("Contato", "")}
+          ${infoCard("Responsável", o.ownerName)}
+          ${infoCard("Fechamento previsto", fmtDay(o.expectedCloseDate))}
+          ${infoCard("Criada em", fmtDateTime(o.createdAt))}
+          ${o.leadId ? linkCard("Origem", "lead.html?id=" + o.leadId, "Convertida de um lead") : ""}
+          ${o.notes ? `<div class="card full"><div class="label">Observações</div><div class="value sm">${esc(o.notes)}</div></div>` : ""}
+        </div>
+
+        <h3 class="section-title">Histórico</h3>
+        <ul class="timeline">
+          ${o.history.map((h) => `
+            <li>
+              <strong>${esc(h.fromStage ? h.fromStage + " → " + h.toStage : h.toStage)}</strong>
+              <span class="muted">· ${esc(h.probability)}% · ${esc(h.userName || "sistema")} · ${fmtDateTime(h.createdAt)}</span>
+              ${h.note ? `<div class="muted">${esc(h.note)}</div>` : ""}
+            </li>`).join("")}
+        </ul>`;
+
+      content.querySelectorAll("[data-stage]").forEach((btn) =>
+        btn.addEventListener("click", async () => {
+          const stage = o.stages.find((s) => s.id === Number(btn.dataset.stage));
+          const updated = await moveOpportunity(o, stage);
+          if (updated) render(updated);
+        })
+      );
+
+      const reopen = document.getElementById("reopenBtn");
+      if (reopen) reopen.addEventListener("click", async () => {
+        try {
+          render(await api(`/opportunities/${o.id}/reopen`, { method: "POST" }));
+          toast("Oportunidade reaberta");
+        } catch (err) {
+          toast(err.message, "err");
+        }
+      });
+
+      const edit = document.getElementById("editBtn");
+      if (edit) edit.addEventListener("click", async () => {
+        const opts = await api("/opportunities/options");
+        openOpportunityForm({ opportunity: o, options: opts, onSaved: render });
+      });
+
+      const del = document.getElementById("deleteBtn");
+      if (del) del.addEventListener("click", async () => {
+        if (!confirm(`Excluir a oportunidade "${o.title}"?`)) return;
+        try {
+          await api("/opportunities/" + o.id, { method: "DELETE" });
+          location.href = "pipeline.html";
+        } catch (err) {
+          toast(err.message, "err");
+        }
+      });
+    }
+
+    load();
+  </script>
+</body>
+</html>

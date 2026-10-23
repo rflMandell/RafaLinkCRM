@@ -73,6 +73,7 @@
           ${field("Criado em", fmtDateTime(lead.createdAt))}
           ${lead.contactId ? linkCard("Contato gerado", "contact.html?id=" + lead.contactId, lead.contactName) : ""}
           ${lead.companyId ? linkCard("Empresa vinculada", "company.html?id=" + lead.companyId, lead.companyName) : ""}
+          ${lead.opportunityId ? linkCard("Oportunidade gerada", "opportunity.html?id=" + lead.opportunityId, lead.opportunityTitle) : ""}
         </div>`;
 
       content.querySelectorAll("[data-status]").forEach((btn) =>
@@ -90,7 +91,7 @@
       if (status === "PERDIDO") {
         reason = prompt("Motivo da perda (opcional):");
         if (reason === null) return;
-      } else if (status === "CONVERTIDO" && !confirm("Converter este lead? Será criado um contato (e a empresa, se informada) e o lead não poderá mais ser editado.")) {
+      } else if (status === "CONVERTIDO" && !confirm("Converter este lead? Serão criados um contato, a empresa (se informada) e uma oportunidade. O lead não poderá mais ser editado.")) {
         return;
       } else if (status === "ARQUIVADO" && !confirm("Arquivar este lead?")) {
         return;
@@ -100,7 +101,7 @@
           method: "POST",
           body: { status, reason: reason || null },
         });
-        toast(status === "CONVERTIDO" ? "Lead convertido: contato criado" : "Status atualizado");
+        toast(status === "CONVERTIDO" ? "Lead convertido: contato e oportunidade criados" : "Status atualizado");
         render(lead);
       } catch (err) {
         toast(err.message, "err");

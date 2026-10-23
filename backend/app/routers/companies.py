@@ -101,7 +101,19 @@ def _detail(db, user, company_id: int) -> dict:
         }
         for c in contacts
     ]
-    dto["opportunities"] = []
+    opps = db.execute(
+        "SELECT o.id, o.title, o.value, o.probability, o.status, s.name AS stage_name "
+        "FROM opportunities o JOIN pipeline_stages s ON s.id = o.stage_id "
+        "WHERE o.company_id = ? ORDER BY o.created_at DESC",
+        (company_id,),
+    ).fetchall()
+    dto["opportunities"] = [
+        {
+            "id": o["id"], "title": o["title"], "value": o["value"],
+            "probability": o["probability"], "status": o["status"], "stageName": o["stage_name"],
+        }
+        for o in opps
+    ]
     return dto
 
 
@@ -227,6 +239,16 @@ def delete_company(
             409, "COMPANY_HAS_CONTACTS",
             f"A empresa possui {company['contact_count']} contato(s). Exclua ou mova os contatos antes.",
         )
+        
+    opp_count = db.execute(
+        "SELECT COUNT(*) FROM opportunities WHERE company_id = ?", (company_id,)
+    ).fetchone()[0]
+    if opp_count > 0:
+        raise AppError(
+            409, "COMPANY_HAS_OPPORTUNITIES",
+            f"A empresa possui {opp_count} oportunidade(s). Exclua as oportunidades antes.",
+        )
+
     db.execute("UPDATE leads SET company_id = NULL WHERE company_id = ?", (company_id,))
     db.execute("DELETE FROM companies WHERE id = ?", (company_id,))
     publish(db, user, "CompanyDeleted", "company", company_id, {"name": company["name"]})

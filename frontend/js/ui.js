@@ -18,7 +18,7 @@ const MENU = [
   { key: "leads", label: "Leads", href: "leads.html" },
   { key: "companies", label: "Empresas", href: "companies.html" },
   { key: "contacts", label: "Contatos", href: "contacts.html" },
-  { key: "pipeline", label: "Pipeline", stage: 4 },
+  { key: "pipeline", label: "Pipeline", href: "pipeline.html" },
   { key: "activities", label: "Atividades", stage: 5 },
   { key: "campaigns", label: "Campanhas", stage: 6 },
   { key: "forecast", label: "Forecast", stage: 7 },
@@ -131,4 +131,27 @@ function renderPager(el, data, noun, go) {
   el.querySelectorAll("button").forEach((b) =>
     b.addEventListener("click", () => go(Number(b.dataset.dir)))
   );
+}
+
+const OPP_STATUS_LABEL = { ABERTA: "Aberta", GANHA: "Ganha", PERDIDA: "Perdida" };
+
+function oppStatusBadge(status) {
+  return `<span class="badge os-${esc(status)}">${esc(OPP_STATUS_LABEL[status] || status)}</span>`;
+}
+
+const BRL = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+
+function fmtMoney(v) {
+  return BRL.format(Number(v || 0));
+}
+
+// Datas sem horário ("2026-11-30") não podem passar por new Date(): o fuso mudaria o dia.
+function fmtDay(s) {
+  if (!s) return "—";
+  const [y, m, d] = s.split("-");
+  return `${d}/${m}/${y}`;
+}
+
+function daysSince(iso) {
+  return Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
 }

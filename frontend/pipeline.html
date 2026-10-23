@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RafaLink CRM - Pipeline</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="app"></div>
+
+  <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/opportunity-form.js"></script>
+  <script>
+    const PIPELINE_KEY = "rafalink_pipeline";
+    const state = { q: "", owner: "" };
+    let options = null;
+    let currentId = null;
+    let boardData = null;
+    let dragId = null;
+
+    function safeGet(key) { try { return localStorage.getItem(key); } catch { return null; } }
+    function safeSet(key, v) { try { localStorage.setItem(key, v); } catch { /* ignora */ } }
+
+    async function init() {
+      const content = renderLayout("pipeline", "Pipeline");
+      content.innerHTML = `
+        <div class="page-head">
+          <h2>Pipeline comercial</h2>
+          <div class="actions" style="margin:0">
+            ${canDelete() ? '<button class="btn" id="newPipelineBtn">+ Novo pipeline</button>' : ""}
+            <button class="btn btn-primary" id="newBtn">+ Nova oportunidade</button>
+          </div>
+        </div>
+        <div class="toolbar">
+          <select id="fpipeline"></select>
+          <input id="fq" placeholder="Buscar oportunidade ou empresa" />
+          <select id="fowner"><option value="">Todos os responsáveis</option></select>
+        </div>
+        <div class="cards" id="summary"></div>
+        <div class="board" id="board" style="margin-top:16px"></div>`;
+
+      try {
+        options = await api("/opportunities/options");
+      } catch (err) {
+        toast(err.message, "err");
+        return;
+      }
+      if (options.pipelines.length === 0) {
+        document.getElementById("board").innerHTML = `<div class="empty">Nenhum pipeline configurado.</div>`;
+        return;
+      }
+
+      const saved = Number(safeGet(PIPELINE_KEY));
+      currentId = options.pipelines.some((p) => p.id === saved)
+        ? saved
+        : (options.pipelines.find((p) => p.isDefault) || options.pipelines[0]).id;
+
+      fillPipelineSelect();
+      fillSelect("fowner", options.owners.map((o) => [o.id, o.name]));
+
+      document.getElementById("fpipeline").addEventListener("change", (e) => {
+        currentId = Number(e.target.value);
+        safeSet(PIPELINE_KEY, String(currentId));
+        load();
+      });
+      document.getElementById("fowner").addEventListener("change", (e) => { state.owner = e.target.value; load(); });
+      document.getElementById("fq").addEventListener("input", debounce((e) => { state.q = e.target.value.trim(); load(); }));
+
+      document.getElementById("newBtn").addEventListener("click", () =>
+        openOpportunityForm({ options, defaults: { pipelineId: currentId }, onSaved: () => load() })
+      );
+      const newPipeline = document.getElementById("newPipelineBtn");
+      if (newPipeline) newPipeline.addEventListener("click", openPipelineForm);
+
+      setupBoardEvents();
+      load();
+    }
+
+    function fillPipelineSelect() {
+      const sel = document.getElementById("fpipeline");
+      sel.innerHTML = options.pipelines
+        .map((p) => `<option value="${p.id}" ${p.id === currentId ? "selected" : ""}>${esc(p.name)}</option>`)
+        .join("");
+    }
+
+    async function load() {
+      const params = new URLSearchParams();
+      if (state.q) params.set("q", state.q);
+      if (state.owner) params.set("owner", state.owner);
+      try {
+        boardData = await api(`/pipelines/${currentId}/board?` + params.toString());
+        renderBoard(boardData);
+      } catch (err) {
+        toast(err.message, "err");
+      }
+    }
+
+    function oppCard(o) {
+      const open = o.status === "ABERTA";
+      const days = daysSince(o.stageChangedAt);
+      return `
+        <div class="opp-card ${open ? "" : "closed"}" ${open ? 'draggable="true"' : ""} data-id="${o.id}">
+          <div class="t">${esc(o.title)}</div>
+          <div class="m">${esc(o.companyName || "Sem empresa")}</div>
+          <div class="v">${fmtMoney(open ? o.value : (o.realizedValue ?? o.value))}</div>
+          <div class="m">${esc(o.ownerName || "—")}${o.expectedCloseDate ? " · fecha " + fmtDay(o.expectedCloseDate) : ""}</div>
+          ${open && days >= 7 ? `<div class="m stale">⏱ ${days} dias nesta etapa</div>` : ""}
+        </div>`;
+    }
+
+    function renderBoard(data) {
+      const s = data.summary;
+      const card = (label, value) =>
+        `<div class="card"><div class="label">${esc(label)}</div><div class="value">${esc(value)}</div></div>`;
+      document.getElementById("summary").innerHTML =
+        card("Pipeline aberto", fmtMoney(s.openValue)) +
+        card("Forecast ponderado", fmtMoney(s.weightedValue)) +
+        card("Oportunidades abertas", s.openCount);
+
+      document.getElementById("board").innerHTML = data.columns.map((col) => {
+        const st = col.stage;
+        const cls = st.kind === "WON" ? "won" : st.kind === "LOST" ? "lost" : "";
+        const cards = col.opportunities.map(oppCard).join("") ||
+          `<div class="muted" style="padding:8px">Sem oportunidades</div>`;
+        const hidden = col.count - col.opportunities.length;
+        return `
+          <div class="column ${cls}" data-stage="${st.id}">
+            <div class="column-head">
+              <div class="name"><span>${esc(st.name)}</span><span>${col.count}</span></div>
+              <div class="sum">${fmtMoney(col.totalValue)}${st.kind === "OPEN" ? " · " + st.probability + "%" : ""}</div>
+            </div>
+            <div class="column-body">
+              ${cards}
+              ${hidden > 0 ? `<div class="muted" style="text-align:center">+ ${hidden} mais antigas</div>` : ""}
+            </div>
+          </div>`;
+      }).join("");
+    }
+
+    // ---------- Arrastar e soltar ----------
+    function clearHighlights() {
+      document.querySelectorAll(".column.drag-over").forEach((c) => c.classList.remove("drag-over"));
+    }
+
+    function setupBoardEvents() {
+      const board = document.getElementById("board");
+
+      board.addEventListener("click", (e) => {
+        const card = e.target.closest(".opp-card");
+        if (card) location.href = "opportunity.html?id=" + card.dataset.id;
+      });
+
+      board.addEventListener("dragstart", (e) => {
+        const card = e.target.closest(".opp-card");
+        if (!card) return;
+        dragId = Number(card.dataset.id);
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", card.dataset.id);
+        card.classList.add("dragging");
+      });
+
+      board.addEventListener("dragend", () => {
+        dragId = null;
+        clearHighlights();
+        document.querySelectorAll(".dragging").forEach((c) => c.classList.remove("dragging"));
+      });
+
+      board.addEventListener("dragover", (e) => {
+        const col = e.target.closest(".column");
+        if (!col || dragId === null) return;
+        e.preventDefault();
+        if (!col.classList.contains("drag-over")) {
+          clearHighlights();
+          col.classList.add("drag-over");
+        }
+      });
+
+      board.addEventListener("drop", async (e) => {
+        const col = e.target.closest(".column");
+        if (!col || dragId === null) return;
+        e.preventDefault();
+        clearHighlights();
+
+        const id = dragId;
+        dragId = null;
+        const stageId = Number(col.dataset.stage);
+        const opp = boardData.columns.flatMap((c) => c.opportunities).find((o) => o.id === id);
+        const target = boardData.columns.find((c) => c.stage.id === stageId);
+        if (!opp || !target || opp.stageId === stageId) return;
+
+        if (await moveOpportunity(opp, target.stage)) load();
+      });
+    }
+
+    // ---------- Novo pipeline ----------
+    function openPipelineForm() {
+      const dlg = document.createElement("dialog");
+      dlg.className = "modal";
+      dlg.innerHTML = `
+        <form id="pipelineForm">
+          <h2>Novo pipeline</h2>
+          <label>Nome *</label>
+          <input name="name" required maxlength="80" placeholder="Ex.: Parcerias">
+          <label>Etapas (uma por linha, no formato "Nome; probabilidade")</label>
+          <textarea name="stages" rows="6">Prospecção; 10
+Qualificação; 30
+Proposta; 60
+Negociação; 80</textarea>
+          <p class="muted" style="margin-top:6px">As etapas finais "Ganho" (100%) e "Perdido" (0%) são adicionadas automaticamente.</p>
+          <div class="error" id="formError"></div>
+          <div class="modal-actions">
+            <button type="button" class="btn" id="cancelBtn">Cancelar</button>
+            <button type="submit" class="btn btn-primary">Criar</button>
+          </div>
+        </form>`;
+      document.body.appendChild(dlg);
+      dlg.showModal();
+      dlg.addEventListener("close", () => dlg.remove());
+      dlg.querySelector("#cancelBtn").addEventListener("click", () => dlg.close());
+
+      dlg.querySelector("#pipelineForm").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const fd = new FormData(e.target);
+        const stages = fd.get("stages").split("\n").map((l) => l.trim()).filter(Boolean).map((line) => {
+          const [name, prob] = line.split(";");
+          return { name: (name || "").trim(), probability: Number((prob || "").trim()) };
+        });
+        if (stages.some((s) => !s.name || Number.isNaN(s.probability))) {
+          dlg.querySelector("#formError").textContent = 'Use o formato "Nome; probabilidade" em todas as linhas.';
+          return;
+        }
+        try {
+          const created = await api("/pipelines", {
+            method: "POST",
+            body: { name: fd.get("name").toString().trim(), stages },
+          });
+          dlg.close();
+          toast("Pipeline criado");
+          options = await api("/opportunities/options");
+          currentId = created.id;
+          safeSet(PIPELINE_KEY, String(currentId));
+          fillPipelineSelect();
+          load();
+        } catch (err) {
+          dlg.querySelector("#formError").textContent = err.message;
+        }
+      });
+    }
+
+    init();
+  </script>
+</body>
+</html>

@@ -59,11 +59,13 @@ FIELD_TO_COLUMN = {
 EMAIL_PATTERN = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
 
 SELECT_SQL = (
-    "SELECT l.*, u.name AS owner_name, c.name AS contact_name, co.name AS company_name "
+    "SELECT l.*, u.name AS owner_name, c.name AS contact_name, co.name AS company_name, "
+    "op.title AS opportunity_title "
     "FROM leads l "
     "LEFT JOIN users u ON u.id = l.owner_id "
     "LEFT JOIN contacts c ON c.id = l.contact_id "
-    "LEFT JOIN companies co ON co.id = l.company_id"
+    "LEFT JOIN companies co ON co.id = l.company_id "
+    "LEFT JOIN opportunities op ON op.id = l.opportunity_id"
 )
 
 
@@ -113,6 +115,8 @@ def to_dto(r) -> dict:
         "contactName": r["contact_name"],
         "companyId": r["company_id"],
         "companyName": r["company_name"],
+        "opportunityId": r["opportunity_id"],
+        "opportunityTitle": r["opportunity_title"],
         "score": r["score"],
         "status": r["status"],
         "lostReason": r["lost_reason"],

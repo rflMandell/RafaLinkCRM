@@ -141,6 +141,83 @@ MIGRATIONS = [
         ALTER TABLE leads ADD COLUMN company_id INTEGER REFERENCES companies(id);
         """,
     ),
+        (
+        "V8__create_pipelines",
+        """
+        CREATE TABLE pipelines (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            organization_id INTEGER NOT NULL REFERENCES organizations(id),
+            name TEXT NOT NULL,
+            is_default INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL
+        );
+        """,
+    ),
+    (
+        "V9__create_pipeline_stages",
+        """
+        CREATE TABLE pipeline_stages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            pipeline_id INTEGER NOT NULL REFERENCES pipelines(id),
+            name TEXT NOT NULL,
+            position INTEGER NOT NULL,
+            probability INTEGER NOT NULL,
+            kind TEXT NOT NULL DEFAULT 'OPEN'
+        );
+        CREATE INDEX idx_stages_pipeline ON pipeline_stages(pipeline_id, position);
+        """,
+    ),
+    (
+        "V10__create_opportunities",
+        """
+        CREATE TABLE opportunities (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            organization_id INTEGER NOT NULL REFERENCES organizations(id),
+            title TEXT NOT NULL,
+            value REAL NOT NULL DEFAULT 0,
+            probability INTEGER NOT NULL DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'ABERTA',
+            pipeline_id INTEGER NOT NULL REFERENCES pipelines(id),
+            stage_id INTEGER NOT NULL REFERENCES pipeline_stages(id),
+            company_id INTEGER REFERENCES companies(id),
+            contact_id INTEGER REFERENCES contacts(id),
+            owner_id INTEGER REFERENCES users(id),
+            lead_id INTEGER REFERENCES leads(id),
+            expected_close_date TEXT,
+            realized_value REAL,
+            lost_reason TEXT,
+            notes TEXT,
+            closed_at TEXT,
+            stage_changed_at TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX idx_opps_org_pipeline ON opportunities(organization_id, pipeline_id, stage_id);
+        CREATE INDEX idx_opps_company ON opportunities(company_id);
+        """,
+    ),
+    (
+        "V11__create_opportunity_history",
+        """
+        CREATE TABLE opportunity_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            opportunity_id INTEGER NOT NULL REFERENCES opportunities(id),
+            user_id INTEGER REFERENCES users(id),
+            from_stage TEXT,
+            to_stage TEXT NOT NULL,
+            probability INTEGER,
+            note TEXT,
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX idx_opp_history ON opportunity_history(opportunity_id);
+        """,
+    ),
+    (
+        "V12__add_lead_opportunity_link",
+        """
+        ALTER TABLE leads ADD COLUMN opportunity_id INTEGER REFERENCES opportunities(id);
+        """,
+    ),
 ]
 
 
