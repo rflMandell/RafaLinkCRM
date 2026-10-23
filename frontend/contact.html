@@ -12,6 +12,7 @@
   <script src="js/api.js"></script>
   <script src="js/ui.js"></script>
   <script src="js/contact-form.js"></script>
+  <script src="js/activity-ui.js"></script>
   <script>
     const contactId = new URLSearchParams(location.search).get("id");
     const content = renderLayout("contacts", "Detalhe do contato");
@@ -33,6 +34,8 @@
         </div>
         <div class="actions">
           <button class="btn" id="editBtn">Editar</button>
+          <button class="btn btn-primary" id="newActBtn">+ Atividade</button>
+          <a class="btn" href="customer.html?type=contact&id=${c.id}">Customer 360</a>
           ${canDelete() ? `<button class="btn btn-danger" id="deleteBtn">Excluir</button>` : ""}
         </div>
         <div class="detail-grid">
@@ -46,7 +49,7 @@
         </div>
 
         <h3 class="section-title">Histórico de interações</h3>
-        <div class="empty">A timeline de ligações, e-mails e reuniões aparece aqui a partir da Etapa 5.</div>`;
+        <div id="timelineBox"><div class="empty">Carregando...</div></div>`;
 
       document.getElementById("editBtn").addEventListener("click", async () => {
         const opts = await api("/contacts/options");
@@ -63,6 +66,33 @@
           toast(err.message, "err");
         }
       });
+
+      document.getElementById("newActBtn").addEventListener("click", async () => {
+        try {
+          const options = await api("/activities/options");
+          openActivityForm({
+            options,
+            defaults: { contactId: c.id, companyId: c.companyId },
+            onSaved: () => loadTimeline(c.id),
+          });
+        } catch (err) {
+          toast(err.message, "err");
+        }
+      });
+
+      loadTimeline(c.id);
+
+    }
+
+    async function loadTimeline(id) {
+      const box = document.getElementById("timelineBox");
+      try {
+        const data = await api(`/timeline?entity=contact&id=${id}&limit=30`);
+        box.innerHTML = renderTimeline(data.content);
+        bindTimeline(box, data.content, () => loadTimeline(id));
+      } catch (err) {
+        box.innerHTML = `<div class="empty">${esc(err.message)}</div>`;
+      }
     }
 
     load();

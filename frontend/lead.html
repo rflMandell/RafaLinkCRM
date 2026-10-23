@@ -60,7 +60,7 @@
           ${statusBadge(lead.status)}
         </div>
         ${stepper}
-        <div class="actions">${actions}${editBtn}</div>
+        <div class="actions">${actions}${editBtn}<a class="btn" href="customer.html?type=lead&id=${lead.id}">Customer 360</a></div>
         <div class="detail-grid">
           ${field("E-mail", lead.email)}
           ${field("Telefone", lead.phone)}

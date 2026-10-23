@@ -202,3 +202,58 @@ textarea:focus { outline: 2px solid var(--primary); border-color: transparent; }
   content: ""; position: absolute; left: -6px; top: 5px; width: 10px; height: 10px;
   border-radius: 50%; background: var(--primary);
 }
+
+/* ---------- Componentes (Etapa 5) ---------- */
+a.btn { text-decoration: none; display: inline-block; }
+
+.as-PENDENTE { background: #1e3a8a; color: #bfdbfe; }
+.as-CONCLUIDA { background: #14532d; color: #86efac; }
+.as-CANCELADA { background: #334155; color: #cbd5e1; }
+.as-ATRASADA { background: #7f1d1d; color: #fecaca; }
+
+.check { display: flex; align-items: center; gap: 8px; margin-top: 14px; color: var(--text); font-size: .9rem; }
+.check input { width: auto; }
+
+.task-group { margin-bottom: 22px; }
+.task-group h3 { font-size: .95rem; margin-bottom: 8px; display: flex; gap: 8px; align-items: center; }
+.task-row {
+  display: flex; gap: 12px; align-items: flex-start; padding: 10px 12px; margin-bottom: 6px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+}
+.task-row.overdue { border-color: var(--danger); }
+.task-row input[type=checkbox] { width: 18px; height: 18px; margin-top: 3px; cursor: pointer; flex: none; }
+.task-row .body { flex: 1; cursor: pointer; min-width: 0; }
+.task-row .t { font-weight: 600; }
+
+.segmented { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.segmented button {
+  padding: 7px 14px; background: transparent; color: var(--text); border: 0; cursor: pointer; font-size: .9rem;
+}
+.segmented button.on { background: var(--primary); color: #fff; font-weight: 600; }
+
+.cal-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 14px; }
+.cal-title { font-weight: 600; text-transform: capitalize; min-width: 230px; text-align: center; }
+.cal-week { display: grid; grid-template-columns: repeat(7, minmax(135px, 1fr)); gap: 8px; overflow-x: auto; }
+.cal-month { display: grid; grid-template-columns: repeat(7, minmax(110px, 1fr)); gap: 6px; overflow-x: auto; }
+.cal-dow { color: var(--muted); font-size: .75rem; text-transform: uppercase; padding: 4px; }
+.cal-day {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  padding: 8px; min-height: 120px; min-width: 0;
+}
+.cal-month .cal-day { min-height: 100px; }
+.cal-day.other { opacity: .45; }
+.cal-day.today { border-color: var(--primary); }
+.cal-day .dn { font-size: .8rem; color: var(--muted); margin-bottom: 6px; cursor: pointer; text-transform: capitalize; }
+.cal-day.today .dn { color: var(--text); font-weight: 700; }
+.chip {
+  font-size: .75rem; padding: 3px 6px; border-radius: 6px; margin-bottom: 4px; cursor: pointer;
+  background: #1e3a8a; color: #dbeafe; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.chip.done { background: #14532d; color: #bbf7d0; text-decoration: line-through; opacity: .8; }
+.chip.late { background: #7f1d1d; color: #fecaca; }
+.more { font-size: .72rem; color: var(--muted); cursor: pointer; }
+
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+@media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
+.timeline li.clickable-li { cursor: pointer; }
+.timeline li.clickable-li:hover strong { color: #a5b4fc; }

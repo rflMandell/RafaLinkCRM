@@ -23,7 +23,7 @@
         `<div class="card"><div class="label">${label}</div><div class="value ${cls}">${esc(value)}</div></div>`;
 
       try {
-        const [health, total, novos, qualificados, companies, contacts, opps] = await Promise.all([
+        const [health, total, novos, qualificados, companies, contacts, opps, tasks] = await Promise.all([
           api("/health"),
           api("/leads?size=1"),
           api("/leads?size=1&status=NOVO"),
@@ -31,6 +31,7 @@
           api("/companies?size=1"),
           api("/contacts?size=1"),
           api("/opportunities/summary"),
+          api("/activities/summary"),
         ]);
         document.getElementById("cards").innerHTML =
           card("Status da API", health.status, "ok") +
@@ -43,7 +44,9 @@
           card("Oportunidades abertas", opps.openCount) +
           card("Pipeline aberto", fmtMoney(opps.openValue)) +
           card("Forecast ponderado", fmtMoney(opps.weightedValue)) +
-          card("Receita ganha", fmtMoney(opps.wonValue), "ok");
+          card("Receita ganha", fmtMoney(opps.wonValue), "ok") +
+          card("Minhas tarefas pendentes", tasks.pending) +
+          card("Minhas tarefas atrasadas", tasks.overdue, tasks.overdue > 0 ? "bad" : "");
       } catch (err) {
         document.getElementById("cards").innerHTML = card("Status da API", "OFFLINE", "bad");
       }

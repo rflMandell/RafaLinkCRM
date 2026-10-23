@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RafaLink CRM - Tarefas</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="app"></div>
+
+  <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/activity-ui.js"></script>
+  <script>
+    const state = { owner: "me" };
+    const GROUPS = [
+      ["overdue", "Atrasadas"],
+      ["today", "Hoje"],
+      ["week", "Próximos 7 dias"],
+      ["later", "Depois"],
+    ];
+
+    function groupOf(a) {
+      if (a.overdue) return "overdue";
+      const key = dayKey(new Date(a.dueAt));
+      if (key === dayKey(new Date())) return "today";
+      return key <= dayKey(addDays(new Date(), 7)) ? "week" : "later";
+    }
+
+    function init() {
+      const content = renderLayout("tasks", "Tarefas");
+      content.innerHTML = `
+        <div class="page-head">
+          <h2>Tarefas</h2>
+          <button class="btn btn-primary" id="newBtn">+ Nova tarefa</button>
+        </div>
+        <div class="toolbar">
+          <select id="fowner">
+            <option value="me">Somente minhas</option>
+            <option value="all">Toda a equipe</option>
+          </select>
+        </div>
+        <div id="groups"></div>`;
+
+      document.getElementById("fowner").addEventListener("change", (e) => { state.owner = e.target.value; load(); });
+      document.getElementById("newBtn").addEventListener("click", async () => {
+        try {
+          const options = await api("/activities/options");
+          openActivityForm({ options, defaults: { type: "TAREFA" }, onSaved: load });
+        } catch (err) {
+          toast(err.message, "err");
+        }
+      });
+      load();
+    }
+
+    async function load() {
+      const params = new URLSearchParams();
+      if (state.owner === "all") params.set("owner", "all");
+      try {
+        const data = await api("/tasks?" + params.toString());
+        render(data.content);
+      } catch (err) {
+        toast(err.message, "err");
+      }
+    }
+
+    function render(items) {
+      const box = document.getElementById("groups");
+      if (items.length === 0) {
+        box.innerHTML = `<div class="empty">Nenhuma tarefa pendente. 🎉</div>`;
+        return;
+      }
+      const showOwner = state.owner === "all";
+      box.innerHTML = GROUPS.map(([key, label]) => {
+        const list = items.filter((a) => groupOf(a) === key);
+        if (list.length === 0) return "";
+        return `
+          <div class="task-group">
+            <h3>${label} <span class="badge as-${key === "overdue" ? "ATRASADA" : "PENDENTE"}">${list.length}</span></h3>
+            ${list.map((a) => taskRowHtml(a, showOwner)).join("")}
+          </div>`;
+      }).join("");
+      bindTaskRows(box, items, load);
+    }
+
+    init();
+  </script>
+</body>
+</html>

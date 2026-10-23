@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RafaLink CRM - Atividades</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="app"></div>
+
+  <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/activity-ui.js"></script>
+  <script>
+    const state = { page: 0, size: 10, q: "", type: "", status: "", owner: "", sort: "dueAt,desc" };
+    let options = null;
+    let rows = [];
+
+    async function init() {
+      const content = renderLayout("activities", "Atividades");
+      content.innerHTML = `
+        <div class="page-head">
+          <h2>Atividades</h2>
+          <button class="btn btn-primary" id="newBtn">+ Nova atividade</button>
+        </div>
+        <div class="toolbar">
+          <input id="fq" placeholder="Buscar por título ou descrição" />
+          <select id="ftype"><option value="">Todos os tipos</option></select>
+          <select id="fstatus">
+            <option value="">Todos os status</option>
+            <option value="PENDENTE">Pendentes</option>
+            <option value="ATRASADA">Atrasadas</option>
+            <option value="CONCLUIDA">Concluídas</option>
+            <option value="CANCELADA">Canceladas</option>
+          </select>
+          <select id="fowner"><option value="">Todos os responsáveis</option></select>
+          <select id="fsort">
+            <option value="dueAt,desc">Data (mais recentes)</option>
+            <option value="dueAt,asc">Data (mais antigas)</option>
+            <option value="createdAt,desc">Criadas por último</option>
+          </select>
+        </div>
+        <div id="tableBox"></div>
+        <div class="pager" id="pager"></div>`;
+
+      try {
+        options = await api("/activities/options");
+      } catch (err) {
+        toast(err.message, "err");
+        return;
+      }
+      fillSelect("ftype", Object.entries(ACTIVITY_TYPES).map(([k, v]) => [k, v.icon + " " + v.label]));
+      fillSelect("fowner", options.owners.map((o) => [o.id, o.name]));
+
+      const bind = (id, key) =>
+        document.getElementById(id).addEventListener("change", (e) => {
+          state[key] = e.target.value;
+          state.page = 0;
+          load();
+        });
+      bind("ftype", "type");
+      bind("fstatus", "status");
+      bind("fowner", "owner");
+      bind("fsort", "sort");
+      document.getElementById("fq").addEventListener("input", debounce((e) => {
+        state.q = e.target.value.trim();
+        state.page = 0;
+        load();
+      }));
+
+      document.getElementById("newBtn").addEventListener("click", () =>
+        openActivityForm({ options, onSaved: () => { state.page = 0; load(); } })
+      );
+      document.getElementById("tableBox").addEventListener("click", (e) => {
+        const row = e.target.closest("tr[data-id]");
+        if (!row) return;
+        const a = rows.find((x) => x.id === Number(row.dataset.id));
+        if (a) openActivityModal(a, load);
+      });
+
+      load();
+    }
+
+    async function load() {
+      const params = new URLSearchParams({ page: state.page, size: state.size, sort: state.sort });
+      for (const k of ["q", "type", "owner"]) if (state[k]) params.set(k, state[k]);
+      if (state.status === "ATRASADA") {
+        params.set("status", "PENDENTE");
+        params.set("overdue", "true");
+      } else if (state.status) {
+        params.set("status", state.status);
+      }
+      try {
+        const data = await api("/activities?" + params.toString());
+        rows = data.content;
+        const box = document.getElementById("tableBox");
+        box.innerHTML = rows.length === 0
+          ? `<div class="empty">Nenhuma atividade encontrada.</div>`
+          : `<table class="grid">
+              <thead><tr><th>Atividade</th><th>Relacionado a</th><th>Responsável</th><th>Quando</th><th>Status</th></tr></thead>
+              <tbody>
+                ${rows.map((a) => `
+                  <tr class="clickable" data-id="${a.id}">
+                    <td><strong>${ACTIVITY_TYPES[a.type].icon} ${esc(a.title)}</strong>
+                        <div class="muted">${esc(ACTIVITY_TYPES[a.type].label)}</div></td>
+                    <td>${esc(relatedText(a) || "—")}</td>
+                    <td>${esc(a.ownerName || "—")}</td>
+                    <td>${fmtDateTime(a.status === "CONCLUIDA" ? a.completedAt : a.dueAt)}</td>
+                    <td>${actStatusBadge(a)}</td>
+                  </tr>`).join("")}
+              </tbody>
+            </table>`;
+        renderPager(document.getElementById("pager"), data, "atividades", (dir) => { state.page += dir; load(); });
+      } catch (err) {
+        toast(err.message, "err");
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>

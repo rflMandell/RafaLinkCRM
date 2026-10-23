@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RafaLink CRM - Customer 360</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="app"></div>
+
+  <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/activity-ui.js"></script>
+  <script>
+    const qs = new URLSearchParams(location.search);
+    const kind = qs.get("type");
+    const entityId = qs.get("id");
+    const menuKey = { lead: "leads", contact: "contacts", company: "companies" }[kind] || "dashboard";
+    const content = renderLayout(menuKey, "Customer 360");
+
+    async function load() {
+      try {
+        render(await api(`/customers/${kind}/${entityId}`));
+      } catch (err) {
+        content.innerHTML = `<p class="bad">${esc(err.message)}</p><p><a class="link" href="app.html">← Voltar</a></p>`;
+      }
+    }
+
+    function render(c) {
+      const badge = c.statusKind === "LEAD" ? statusBadge(c.status)
+        : c.statusKind === "CONTACT" ? contactStatusBadge(c.status) : typeBadge(c.status);
+
+      const days = c.lastInteractionAt ? daysSince(c.lastInteractionAt) : null;
+      const lastText = days === null ? "Sem interações" : days === 0 ? "Hoje" : `Há ${days} dia${days > 1 ? "s" : ""}`;
+      const card = (label, value, sub = "") =>
+        `<div class="card"><div class="label">${esc(label)}</div><div class="value sm">${esc(value)}</div>${sub ? `<div class="muted">${esc(sub)}</div>` : ""}</div>`;
+
+      const oppsHtml = c.opportunities.length === 0
+        ? `<div class="empty">Nenhuma oportunidade.</div>`
+        : `<table class="grid">
+            <thead><tr><th>Oportunidade</th><th>Etapa</th><th>Valor</th><th>Status</th></tr></thead>
+            <tbody>
+              ${c.opportunities.map((o) => `
+                <tr class="clickable" data-opp="${o.id}">
+                  <td><strong>${esc(o.title)}</strong></td>
+                  <td>${esc(o.stageName)} · ${o.probability}%</td>
+                  <td>${fmtMoney(o.status === "GANHA" ? (o.realizedValue ?? o.value) : o.value)}</td>
+                  <td>${oppStatusBadge(o.status)}</td>
+                </tr>`).join("")}
+            </tbody>
+          </table>`;
+
+      const contactsHtml = kind !== "company" ? "" : `
+        <h3 class="section-title">Contatos (${c.contacts.length})</h3>
+        ${c.contacts.length === 0 ? `<div class="empty">Nenhum contato.</div>` : `
+          <table class="grid">
+            <thead><tr><th>Nome</th><th>Cargo</th><th>E-mail</th></tr></thead>
+            <tbody>
+              ${c.contacts.map((ct) => `
+                <tr class="clickable" data-contact="${ct.id}">
+                  <td><strong>${esc(ct.name)}</strong></td><td>${esc(ct.jobTitle || "—")}</td><td>${esc(ct.email || "—")}</td>
+                </tr>`).join("")}
+            </tbody>
+          </table>`}`;
+
+      content.innerHTML = `
+        <p><a href="${kind}.html?id=${c.id}" class="muted">← Voltar ao cadastro</a></p>
+        <div class="page-head">
+          <div>
+            <h2>${esc(c.title)}</h2>
+            <div class="muted">${esc(c.subtitle || "")}</div>
+            <div class="muted">${esc([c.email, c.phone].filter(Boolean).join(" · "))}</div>
+          </div>
+          ${badge}
+        </div>
+        <div class="actions">
+          <button class="btn btn-primary" id="newActBtn">+ Registrar atividade</button>
+          ${c.companyId ? `<a class="btn" href="customer.html?type=company&id=${c.companyId}">Customer 360 da empresa</a>` : ""}
+        </div>
+
+        <div class="cards">
+          ${card("Responsável", c.ownerName || "—")}
+          ${c.score !== null ? card("Score", c.score + "/100") : ""}
+          ${card("Pipeline aberto", fmtMoney(c.pipelineValue), c.openOpportunities + " oportunidade(s) aberta(s)")}
+          ${card("Forecast ponderado", fmtMoney(c.weightedValue))}
+          ${card("Receita ganha", fmtMoney(c.wonValue))}
+          ${card("Última interação", lastText, c.lastInteractionAt ? fmtDateTime(c.lastInteractionAt) : "")}
+        </div>
+
+        <div class="two-col">
+          <div>
+            <h3 class="section-title">Próximas atividades</h3>
+            <div id="upcomingBox"></div>
+          </div>
+          <div>
+            <h3 class="section-title">Oportunidades (${c.opportunities.length})</h3>
+            ${oppsHtml}
+          </div>
+        </div>
+
+        ${contactsHtml}
+
+        <h3 class="section-title">Timeline</h3>
+        <div id="timelineBox"></div>`;
+
+      const upcomingBox = document.getElementById("upcomingBox");
+      upcomingBox.innerHTML = c.upcoming.length === 0
+        ? `<div class="empty">Nenhuma atividade agendada.</div>`
+        : c.upcoming.map((a) => taskRowHtml(a, true)).join("");
+      bindTaskRows(upcomingBox, c.upcoming, load);
+
+      const timelineBox = document.getElementById("timelineBox");
+      timelineBox.innerHTML = renderTimeline(c.timeline);
+      bindTimeline(timelineBox, c.timeline, load);
+
+      content.querySelectorAll("tr[data-opp]").forEach((row) =>
+        row.addEventListener("click", () => (location.href = "opportunity.html?id=" + row.dataset.opp))
+      );
+      content.querySelectorAll("tr[data-contact]").forEach((row) =>
+        row.addEventListener("click", () => (location.href = "customer.html?type=contact&id=" + row.dataset.contact))
+      );
+
+      document.getElementById("newActBtn").addEventListener("click", async () => {
+        try {
+          const options = await api("/activities/options");
+          const defaults = kind === "lead" ? { leadId: c.id }
+            : kind === "contact" ? { contactId: c.id, companyId: c.companyId }
+            : { companyId: c.id };
+          openActivityForm({ options, defaults, onSaved: load });
+        } catch (err) {
+          toast(err.message, "err");
+        }
+      });
+    }
+
+    load();
+  </script>
+</body>
+</html>

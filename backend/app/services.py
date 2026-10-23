@@ -2,6 +2,7 @@
 from .database import now_iso
 from .errors import AppError
 from .events import publish
+from datetime import datetime, timezone
 
 EMAIL_PATTERN = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
 
@@ -179,3 +180,10 @@ def add_history(db, user, opportunity_id: int, from_stage, to_stage: str, probab
         "probability, note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
         (opportunity_id, user["id"], from_stage, to_stage, probability, note, now_iso()),
     )
+    
+def to_utc_iso(dt: datetime) -> str:
+    """Normaliza qualquer data/hora para UTC no formato único usado no banco.
+    Datas sem fuso são tratadas como UTC."""
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc).isoformat(timespec="seconds")

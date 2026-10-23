@@ -71,6 +71,30 @@ DEMO_OPPORTUNITIES = [
     ("Renovação Clínica Vida Plena", 22000, "Renovações", "Proposta", "Clínica Vida Plena", "Marcelo Tavares", 25, None),
 ]
 
+# tipo, título, descrição, dias (negativo = passado), hora (UTC), status,
+# lead, contato, empresa, oportunidade
+DEMO_ACTIVITIES = [
+    ("LIGACAO", "Ligação de qualificação", "Cliente demonstrou interesse na versão corporativa.", -2, 14, "CONCLUIDA", "Maria Souza", None, None, None),
+    ("EMAIL", "Proposta comercial enviada", "Enviada proposta com 3 opções de plano.", -1, 17, "CONCLUIDA", "Maria Souza", None, None, None),
+    ("REUNIAO", "Reunião de descoberta", "Levantamento de requisitos com a equipe de TI.", -4, 15, "CONCLUIDA", "João Silva", None, None, None),
+    ("NOTA", "Perfil do cliente", "Decisor é o diretor financeiro; prefere contato por e-mail.", -3, 16, "CONCLUIDA", None, "André Almeida", "Empresa XYZ", None),
+    ("LIGACAO", "Alinhamento de prazos", "Combinado o envio do contrato até sexta.", -1, 19, "CONCLUIDA", None, "Patrícia Nunes", "Empresa XYZ", "Contrato de Software"),
+    ("FOLLOW_UP", "Follow-up da proposta", "Perguntar se houve retorno do jurídico.", 0, 18, "PENDENTE", None, "Patrícia Nunes", "Empresa XYZ", "Contrato de Software"),
+    ("REUNIAO", "Apresentação final da proposta", "Reunião com Patrícia e André.", 2, 14, "PENDENTE", None, "Patrícia Nunes", "Empresa XYZ", "Contrato de Software"),
+    ("TAREFA", "Preparar contrato para assinatura", "Revisar as cláusulas de SLA.", -1, 13, "PENDENTE", None, None, "Empresa XYZ", "Licenças Corporativas"),
+    ("LIGACAO", "Primeiro contato", "Ligar e apresentar a empresa.", 0, 17, "PENDENTE", "Ana Paula Lima", None, None, None),
+    ("WHATSAPP", "Enviar material institucional", None, 1, 15, "PENDENTE", "Carlos Oliveira", None, None, None),
+    ("REUNIAO", "Visita técnica na obra", "Visita com o engenheiro chefe.", 4, 13, "PENDENTE", None, "Roberto Campos", "Construtora Horizonte", "Reforma da Sede"),
+    ("TAREFA", "Elaborar orçamento da reforma", None, 3, 16, "PENDENTE", None, None, "Construtora Horizonte", "Reforma da Sede"),
+    ("FOLLOW_UP", "Retomar contato", "Sem resposta há 5 dias.", -3, 15, "PENDENTE", "Ricardo Alves", None, None, None),
+    ("EMAIL", "Enviar proposta de renovação", None, 1, 14, "PENDENTE", None, "Marcelo Tavares", "Clínica Vida Plena", "Renovação Clínica Vida Plena"),
+    ("REUNIAO", "Reunião de kickoff", "Início do contrato anual.", -10, 14, "CONCLUIDA", None, "Juliana Martins", "Bela Flor", "Contrato Anual Bela Flor"),
+    ("NOTA", "Cliente satisfeito", "Elogiou o atendimento da equipe.", -6, 16, "CONCLUIDA", None, "Helena Duarte", "Clínica Vida Plena", None),
+    ("LIGACAO", "Ligação de reagendamento", "Cliente pediu para remarcar.", -2, 18, "CANCELADA", "Pedro Santos", None, None, None),
+    ("REUNIAO", "Reunião mensal de acompanhamento", None, 8, 14, "PENDENTE", None, "Marcelo Tavares", "Clínica Vida Plena", None),
+    ("TAREFA", "Atualizar planilha de metas", None, 5, 17, "PENDENTE", None, None, None, None),
+]
+
 
 def seed() -> None:
     conn = get_conn()
@@ -218,5 +242,43 @@ def seed() -> None:
             )
         conn.commit()
         print("[seed] oportunidades de demonstração criadas")
+    
+    if conn.execute("SELECT COUNT(*) FROM activities").fetchone()[0] == 0:
+        owner_ids = [
+            r["id"]
+            for r in conn.execute(
+                "SELECT id FROM users WHERE organization_id = ? ORDER BY id", (org_id,)
+            )
+        ]
+        now = datetime.now(timezone.utc)
+
+        def find(table, col, value):
+            if not value:
+                return None
+            row = conn.execute(
+                f"SELECT id FROM {table} WHERE organization_id = ? AND {col} = ?", (org_id, value)
+            ).fetchone()
+            return row["id"] if row else None
+
+        for i, (atype, title, desc, days, hour, status, lead, contact, company, opp) in enumerate(DEMO_ACTIVITIES):
+            when = now.replace(hour=hour, minute=0, second=0, microsecond=0) + timedelta(days=days)
+            when_iso = when.isoformat(timespec="seconds")
+            created = (min(when, now) - timedelta(days=2)).isoformat(timespec="seconds")
+            owner = owner_ids[i % len(owner_ids)]
+            conn.execute(
+                "INSERT INTO activities(organization_id, type, title, description, status, due_at, "
+                "completed_at, owner_id, created_by, lead_id, contact_id, company_id, opportunity_id, "
+                "created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    org_id, atype, title, desc, status, when_iso,
+                    when_iso if status == "CONCLUIDA" else None,
+                    owner, owner,
+                    find("leads", "name", lead), find("contacts", "name", contact),
+                    find("companies", "name", company), find("opportunities", "title", opp),
+                    created, created,
+                ),
+            )
+        conn.commit()
+        print("[seed] atividades de demonstração criadas")
     
     conn.close()

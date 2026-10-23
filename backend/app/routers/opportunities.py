@@ -423,6 +423,7 @@ def delete_opportunity(
     user=Depends(require_roles("ADMIN", "SALES_MANAGER")),
 ):
     opp = _get(db, user, opp_id)
+    db.execute("UPDATE activities SET opportunity_id = NULL WHERE opportunity_id = ?", (opp_id,))
     db.execute("UPDATE leads SET opportunity_id = NULL WHERE opportunity_id = ?", (opp_id,))
     db.execute("DELETE FROM opportunity_history WHERE opportunity_id = ?", (opp_id,))
     db.execute("DELETE FROM opportunities WHERE id = ?", (opp_id,))

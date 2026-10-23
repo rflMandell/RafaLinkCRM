@@ -53,7 +53,7 @@ MIGRATIONS = [
         );
         """,
     ),
-        (
+    (
         "V3__create_leads",
         """
         CREATE TABLE leads (
@@ -92,7 +92,7 @@ MIGRATIONS = [
         );
         """,
     ),
-        (
+    (
         "V5__create_companies",
         """
         CREATE TABLE companies (
@@ -141,7 +141,7 @@ MIGRATIONS = [
         ALTER TABLE leads ADD COLUMN company_id INTEGER REFERENCES companies(id);
         """,
     ),
-        (
+    (
         "V8__create_pipelines",
         """
         CREATE TABLE pipelines (
@@ -216,6 +216,34 @@ MIGRATIONS = [
         "V12__add_lead_opportunity_link",
         """
         ALTER TABLE leads ADD COLUMN opportunity_id INTEGER REFERENCES opportunities(id);
+        """,
+    ),
+    (
+        "V13__create_activities",
+        """
+        CREATE TABLE activities (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            organization_id INTEGER NOT NULL REFERENCES organizations(id),
+            type TEXT NOT NULL,
+            title TEXT NOT NULL,
+            description TEXT,
+            status TEXT NOT NULL DEFAULT 'PENDENTE',
+            due_at TEXT NOT NULL,
+            completed_at TEXT,
+            owner_id INTEGER REFERENCES users(id),
+            created_by INTEGER REFERENCES users(id),
+            lead_id INTEGER REFERENCES leads(id),
+            contact_id INTEGER REFERENCES contacts(id),
+            company_id INTEGER REFERENCES companies(id),
+            opportunity_id INTEGER REFERENCES opportunities(id),
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX idx_activities_org_due ON activities(organization_id, status, due_at);
+        CREATE INDEX idx_activities_lead ON activities(lead_id);
+        CREATE INDEX idx_activities_contact ON activities(contact_id);
+        CREATE INDEX idx_activities_company ON activities(company_id);
+        CREATE INDEX idx_activities_opportunity ON activities(opportunity_id);
         """,
     ),
 ]

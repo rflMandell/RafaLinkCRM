@@ -249,6 +249,7 @@ def delete_company(
             f"A empresa possui {opp_count} oportunidade(s). Exclua as oportunidades antes.",
         )
 
+    db.execute("UPDATE activities SET company_id = NULL WHERE company_id = ?", (company_id,))
     db.execute("UPDATE leads SET company_id = NULL WHERE company_id = ?", (company_id,))
     db.execute("DELETE FROM companies WHERE id = ?", (company_id,))
     publish(db, user, "CompanyDeleted", "company", company_id, {"name": company["name"]})
