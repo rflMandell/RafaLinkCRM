@@ -26,7 +26,10 @@ const MENU = [
   { key: "forecast", label: "Forecast", href: "forecast.html" },
   { key: "goals", label: "Metas", href: "goals.html" },
   { key: "sla", label: "SLA", href: "sla.html" },
-    { key: "ai", label: "IA", href: "ai.html" },
+  { key: "ai", label: "IA", href: "ai.html" },
+  { key: "notifications", label: "Notificações", href: "notifications.html" },
+  { key: "automations", label: "Automação", href: "automations.html" },
+  { key: "audit", label: "Auditoria", href: "audit.html" },
   { key: "settings", label: "Configurações", stage: 10 },
 ];
 
@@ -76,7 +79,11 @@ function renderLayout(activeKey, title) {
       <main>
         <div class="topbar">
           <strong>${esc(title)}</strong>
-          <div>
+          <div class="topbar-right">
+            <div class="bell-wrap">
+              <button id="bellBtn" class="bell" aria-label="Notificações" aria-haspopup="true"><span aria-hidden="true">🔔</span><span class="bell-count" id="bellCount" hidden>0</span></button>
+              <div class="bell-menu" id="bellMenu" hidden></div>
+            </div>
             <span class="who">${esc(user.name)} · ${esc(user.role)}</span>
             <button id="logoutBtn">Sair</button>
           </div>
@@ -87,6 +94,7 @@ function renderLayout(activeKey, title) {
     <div id="toasts"></div>`;
 
   document.getElementById("logoutBtn").addEventListener("click", logout);
+  initBell();
   return document.getElementById("content");
 }
 
@@ -159,4 +167,66 @@ function fmtDay(s) {
 
 function daysSince(iso) {
   return Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+}
+
+// ---------- Etapa 9: sino de notificações ----------
+const NOTIF_PAGE = {
+  lead: (id) => `lead.html?id=${id}`,
+  opportunity: (id) => `opportunity.html?id=${id}`,
+  company: (id) => `company.html?id=${id}`,
+  activity: () => "tasks.html",
+};
+function notifLink(n) { const f = NOTIF_PAGE[n.entity]; return f ? f(n.entityId) : null; }
+
+function timeAgo(iso) {
+  const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+  if (s < 60) return "agora";
+  if (s < 3600) return `há ${Math.floor(s / 60)} min`;
+  if (s < 86400) return `há ${Math.floor(s / 3600)} h`;
+  return `há ${Math.floor(s / 86400)} d`;
+}
+
+function initBell() {
+  const btn = document.getElementById("bellBtn");
+  const menu = document.getElementById("bellMenu");
+  const badge = document.getElementById("bellCount");
+  if (!btn) return;
+
+  async function refresh() {
+    try {
+      const { count } = await api("/notifications/unread-count");
+      badge.textContent = count > 99 ? "99+" : count;
+      badge.hidden = count === 0;
+      btn.setAttribute("aria-label", `Notificações (${count} não lidas)`);
+    } catch { /* sem rede: mantém o último valor */ }
+  }
+
+  async function openMenu() {
+    try {
+      const r = await api("/notifications?size=6");
+      menu.innerHTML = (r.content.length ? r.content.map((n) => `
+        <a class="bell-item ${n.read ? "" : "unread"}" href="${notifLink(n) || "notifications.html"}" data-id="${n.id}">
+          <strong>${esc(n.title)}</strong><span>${esc(n.message || "")}</span><em>${timeAgo(n.createdAt)}</em>
+        </a>`).join("") : `<div class="bell-empty">Nenhuma notificação.</div>`) + `
+        <div class="bell-foot"><button type="button" id="bellReadAll">Marcar todas como lidas</button>
+        <a href="notifications.html">Ver todas</a></div>`;
+      menu.querySelectorAll(".bell-item").forEach((a) => a.addEventListener("click", () => {
+        api(`/notifications/${a.dataset.id}/read`, { method: "POST" }).catch(() => {});
+      }));
+      menu.querySelector("#bellReadAll").addEventListener("click", async () => {
+        await api("/notifications/read-all", { method: "POST" }); refresh(); openMenu();
+      });
+    } catch (e) { menu.innerHTML = `<div class="bell-empty">${esc(e.message)}</div>`; }
+  }
+
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    menu.hidden = !menu.hidden;
+    if (!menu.hidden) openMenu();
+  });
+  document.addEventListener("click", (e) => { if (!menu.contains(e.target)) menu.hidden = true; });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") menu.hidden = true; });
+  btn.addEventListener("refresh", refresh);   // outras páginas pedem atualização com btn.dispatchEvent(new Event("refresh"))
+  refresh();
+  setInterval(refresh, 30000);
 }

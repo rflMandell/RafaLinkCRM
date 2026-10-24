@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RafaLink CRM - Auditoria</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="app"></div>
+
+  <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
+  <script>
+    let page = 0;
+    const F = { q: "", entity: "", type: "", userId: "", dateFrom: "", dateTo: "" };
+
+    const qs = (extra = {}) => {
+      const p = new URLSearchParams();
+      Object.entries({ ...F, ...extra }).forEach(([k, v]) => { if (v !== "" && v != null) p.set(k, v); });
+      return p.toString();
+    };
+
+    async function init() {
+      const content = renderLayout("audit", "Auditoria");
+      content.innerHTML = `
+        <div class="page-head"><h2>Auditoria</h2><button class="btn" id="export">Exportar CSV</button></div>
+        <div class="toolbar">
+          <input id="q" type="search" placeholder="Buscar nos detalhes…" aria-label="Buscar" />
+          <select id="entity" aria-label="Entidade"><option value="">Todas as entidades</option></select>
+          <select id="type" aria-label="Ação"><option value="">Todas as ações</option></select>
+          <select id="userId" aria-label="Usuário"><option value="">Todos os usuários</option></select>
+          <label class="muted">De <input type="date" id="dateFrom" /></label>
+          <label class="muted">Até <input type="date" id="dateTo" /></label>
+          <button class="btn" id="clear">Limpar</button>
+        </div>
+        <div id="list"></div><div class="pager" id="pager"></div>
+        <p class="note">A auditoria lista tudo que o sistema registrou como evento, na hora em que aconteceu (datas em horário local). Ações automáticas aparecem como “Sistema”.</p>`;
+      try {
+        const o = await api("/audit/options");
+        fill("entity", o.entities); fill("type", o.types);
+        document.getElementById("userId").insertAdjacentHTML("beforeend", o.users.map((u) => `<option value="${u.id}">${esc(u.name)}</option>`).join(""));
+      } catch (e) { document.getElementById("list").innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+      ["entity", "type", "userId", "dateFrom", "dateTo"].forEach((id) => document.getElementById(id).addEventListener("change", (e) => { F[id] = e.target.value; page = 0; load(); }));
+      let t; document.getElementById("q").addEventListener("input", (e) => { clearTimeout(t); t = setTimeout(() => { F.q = e.target.value.trim(); page = 0; load(); }, 300); });
+      document.getElementById("clear").addEventListener("click", () => {
+        Object.keys(F).forEach((k) => { F[k] = ""; const el = document.getElementById(k); if (el) el.value = ""; }); page = 0; load();
+      });
+      document.getElementById("export").addEventListener("click", exportCsv);
+      load();
+    }
+    const fill = (id, items) => document.getElementById(id).insertAdjacentHTML("beforeend", items.map((i) => `<option value="${esc(i.value)}">${esc(i.label)}</option>`).join(""));
+
+    async function load() {
+      try {
+        const r = await api(`/audit?${qs({ page, size: 25 })}`);
+        document.getElementById("list").innerHTML = r.content.length ? `<table class="grid"><thead><tr><th>Quando</th><th>Quem</th><th>O quê</th><th>Detalhes</th></tr></thead><tbody>
+          ${r.content.map((e) => `<tr>
+            <td style="white-space:nowrap">${fmtDateTime(e.createdAt)}</td>
+            <td>${esc(e.userName)}</td>
+            <td><strong>${esc(e.typeLabel)}</strong><div class="muted">${esc(e.entityLabel)}${e.entityId ? " #" + e.entityId : ""}</div></td>
+            <td>${esc(e.summary) || '<span class="muted">—</span>'}
+              <details class="payload"><summary>Ver dados</summary><pre>${esc(JSON.stringify(e.payload, null, 2))}</pre></details></td></tr>`).join("")}</tbody></table>`
+          : `<div class="empty">Nenhum evento com estes filtros.</div>`;
+        document.getElementById("pager").innerHTML = `<span>Página ${r.totalPages ? r.page + 1 : 0} de ${r.totalPages} · ${r.totalElements} eventos</span>
+          <div><button class="btn" id="prev" ${r.page === 0 ? "disabled" : ""}>Anterior</button><button class="btn" id="next" ${r.page + 1 >= r.totalPages ? "disabled" : ""}>Próxima</button></div>`;
+        document.getElementById("prev").addEventListener("click", () => { page--; load(); });
+        document.getElementById("next").addEventListener("click", () => { page++; load(); });
+      } catch (e) { toast(e.message, "err"); }
+    }
+
+    // O download precisa do token, então busca com fetch e entrega como arquivo.
+    async function exportCsv() {
+      try {
+        const res = await fetch(`${API_BASE}/audit/export?${qs()}`, { headers: { Authorization: "Bearer " + getToken() } });
+        if (!res.ok) throw new Error("Não foi possível exportar.");
+        const url = URL.createObjectURL(await res.blob());
+        const a = Object.assign(document.createElement("a"), { href: url, download: "auditoria.csv" });
+        document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+        toast("CSV exportado.");
+      } catch (e) { toast(e.message, "err"); }
+    }
+    init();
+  </script>
+</body>
+</html>

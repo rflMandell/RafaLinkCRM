@@ -324,6 +324,55 @@ MIGRATIONS = [
         );
         """
     ),
+    (
+        "V19__create_automation_notifications", 
+        """
+        CREATE TABLE notifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            organization_id INTEGER NOT NULL REFERENCES organizations(id),
+            user_id INTEGER NOT NULL REFERENCES users(id),
+            type TEXT NOT NULL,
+            title TEXT NOT NULL,
+            message TEXT,
+            entity TEXT,
+            entity_id INTEGER,
+            read_at TEXT,
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX idx_notifications_user ON notifications(user_id, read_at, created_at);
+
+        CREATE TABLE automation_rules (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            organization_id INTEGER NOT NULL REFERENCES organizations(id),
+            name TEXT NOT NULL,
+            trigger_type TEXT NOT NULL,
+            action TEXT NOT NULL,
+            config TEXT NOT NULL DEFAULT '{}',
+            active INTEGER NOT NULL DEFAULT 1,
+            run_count INTEGER NOT NULL DEFAULT 0,
+            last_run_at TEXT,
+            created_by INTEGER REFERENCES users(id),
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+
+        CREATE TABLE automation_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            organization_id INTEGER NOT NULL REFERENCES organizations(id),
+            rule_id INTEGER NOT NULL REFERENCES automation_rules(id),
+            dedupe_key TEXT NOT NULL,
+            entity TEXT,
+            entity_id INTEGER,
+            entity_name TEXT,
+            status TEXT NOT NULL DEFAULT 'OK',
+            message TEXT,
+            created_at TEXT NOT NULL,
+            UNIQUE (rule_id, dedupe_key)
+        );
+        CREATE INDEX idx_runs_org ON automation_runs(organization_id, id);
+        CREATE INDEX idx_events_org ON domain_events(organization_id, id);
+        """
+    ),
 
 ]
 

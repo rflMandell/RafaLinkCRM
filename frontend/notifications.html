@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RafaLink CRM - Notificações</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="app"></div>
+
+  <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
+  <script>
+    let page = 0, onlyUnread = false;
+    const SIZE = 15;
+    const TYPE_LABEL = {
+      SLA_BREACH: "SLA", HOT_LEAD: "Lead quente", CHURN_HIGH: "Churn", TASK_OVERDUE: "Tarefa atrasada",
+      OPP_CLOSING_SOON: "Fechamento", NEW_LEAD: "Novo lead", OPP_WON: "Venda ganha", OPP_LOST: "Perdida",
+    };
+
+    function init() {
+      const content = renderLayout("notifications", "Notificações");
+      content.innerHTML = `
+        <div class="page-head"><h2>Notificações</h2>
+          <button class="btn" id="readAll">Marcar todas como lidas</button></div>
+        <div class="toolbar">
+          <select id="filter" aria-label="Filtro"><option value="">Todas</option><option value="1">Somente não lidas</option></select>
+        </div>
+        <div id="list" class="notif-list"></div>
+        <div class="pager" id="pager"></div>
+        <p class="note">As notificações são criadas pelas regras da tela <a href="automations.html" style="color:var(--primary-hover)">Automação</a> e atualizadas a cada 60 segundos.</p>`;
+      document.getElementById("filter").addEventListener("change", (e) => { onlyUnread = e.target.value === "1"; page = 0; load(); });
+      document.getElementById("readAll").addEventListener("click", async () => {
+        const r = await api("/notifications/read-all", { method: "POST" });
+        toast(`${r.updated} notificação(ões) marcadas como lidas.`); load(); initBellRefresh();
+      });
+      load();
+    }
+    const initBellRefresh = () => document.getElementById("bellBtn")?.dispatchEvent(new Event("refresh"));
+
+    async function load() {
+      try {
+        const r = await api(`/notifications?page=${page}&size=${SIZE}${onlyUnread ? "&unread=true" : ""}`);
+        const list = document.getElementById("list");
+        list.innerHTML = r.content.length ? r.content.map((n) => {
+          const link = notifLink(n);
+          return `<div class="notif ${n.read ? "" : "unread"}">
+            <div>
+              <div class="title">${link ? `<a href="${link}" data-read="${n.id}">${esc(n.title)}</a>` : esc(n.title)}</div>
+              <div class="muted">${esc(n.message || "")}</div>
+              <div class="muted">${esc(TYPE_LABEL[n.type] || n.type)} · ${timeAgo(n.createdAt)}${n.read ? "" : " · <strong>nova</strong>"}</div>
+            </div>
+            <div class="btns">
+              ${n.read ? "" : `<button class="btn" data-mark="${n.id}">Marcar como lida</button>`}
+              <button class="btn btn-danger" data-del="${n.id}" aria-label="Excluir notificação">Excluir</button>
+            </div></div>`;
+        }).join("") : `<div class="empty">${onlyUnread ? "Nenhuma notificação não lida." : "Nenhuma notificação ainda."}</div>`;
+        list.querySelectorAll("[data-mark]").forEach((b) => b.addEventListener("click", async () => { await api(`/notifications/${b.dataset.mark}/read`, { method: "POST" }); load(); }));
+        list.querySelectorAll("[data-del]").forEach((b) => b.addEventListener("click", async () => { await api(`/notifications/${b.dataset.del}`, { method: "DELETE" }); load(); }));
+        list.querySelectorAll("[data-read]").forEach((a) => a.addEventListener("click", () => api(`/notifications/${a.dataset.read}/read`, { method: "POST" }).catch(() => {})));
+        document.getElementById("pager").innerHTML = r.totalPages > 1 ? `<span>Página ${r.page + 1} de ${r.totalPages} · ${r.totalElements} notificações</span>
+          <div><button class="btn" id="prev" ${r.page === 0 ? "disabled" : ""}>Anterior</button><button class="btn" id="next" ${r.page + 1 >= r.totalPages ? "disabled" : ""}>Próxima</button></div>` : `<span>${r.unread} não lida(s)</span>`;
+        document.getElementById("prev")?.addEventListener("click", () => { page--; load(); });
+        document.getElementById("next")?.addEventListener("click", () => { page++; load(); });
+      } catch (e) { toast(e.message, "err"); }
+    }
+    init();
+  </script>
+</body>
+</html>

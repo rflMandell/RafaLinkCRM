@@ -9,9 +9,10 @@ from .database import run_migrations
 from .errors import register_error_handlers
 from .routers import (
     activities, auth, campaigns, companies, contacts, customers, forecast, goals, leads,
-    opportunities, pipelines, reports, sla, ai,
+    opportunities, pipelines, reports, sla, ai, automations, audit, notifications,
 )
 from .seed import seed
+from .worker import start_worker
 
 
 FRONTEND_DIR = Path(__file__).resolve().parents[2] / "frontend"
@@ -65,8 +66,14 @@ api_v1.include_router(forecast.router)
 api_v1.include_router(goals.router)
 api_v1.include_router(sla.router)
 api_v1.include_router(ai.router)
+api_v1.include_router(notifications.router)
+api_v1.include_router(automations.router)
+api_v1.include_router(audit.router)
 app.include_router(api_v1)
 
 # O backend também serve o frontend: tudo em http://localhost:8000
 # (precisa ficar DEPOIS das rotas da API)
 app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
+
+# toda a audt em segundo plano
+start_worker()

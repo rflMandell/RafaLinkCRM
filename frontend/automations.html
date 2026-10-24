@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RafaLink CRM - Automação</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="app"></div>
+  <dialog class="modal" id="ruleDlg"></dialog>
+
+  <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
+  <script>
+    let data = null, tab = "rules", runsPage = 0, runsRule = "";
+
+    function init() {
+      const content = renderLayout("automations", "Automação");
+      content.innerHTML = `
+        <div class="page-head"><h2>Automação</h2>
+          <div class="toolbar" style="margin:0">
+            <button class="btn" id="runNow" hidden>Executar agora</button>
+            <button class="btn btn-primary" id="newRule" hidden>+ Nova regra</button>
+          </div></div>
+        <p class="note" style="margin-top:0">Cada regra liga um <strong>gatilho</strong> a uma <strong>ação</strong>. O motor procura as situações a cada 60 segundos e nunca repete a mesma situação.</p>
+        <div class="ai-tabs" role="tablist">
+          <button role="tab" data-tab="rules">Regras</button><button role="tab" data-tab="runs">Execuções</button>
+        </div>
+        <div id="panel"></div>`;
+      content.querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => { tab = b.dataset.tab; render(); }));
+      document.getElementById("runNow").addEventListener("click", async () => {
+        try {
+          const r = await api("/automations/run", { method: "POST" });
+          toast(r.executed ? `${r.executed} execução(ões) feitas.` : "Nada novo para executar.");
+          await load(); document.getElementById("bellBtn")?.dispatchEvent(new Event("refresh"));
+        } catch (e) { toast(e.message, "err"); }
+      });
+      document.getElementById("newRule").addEventListener("click", () => openDialog(null));
+      load();
+    }
+
+    async function load() {
+      try { data = await api("/automations"); } catch (e) { toast(e.message, "err"); return; }
+      document.getElementById("runNow").hidden = !data.canManage;
+      document.getElementById("newRule").hidden = !data.canManage;
+      render();
+    }
+
+    function render() {
+      document.querySelectorAll("[data-tab]").forEach((b) => {
+        const on = b.dataset.tab === tab; b.classList.toggle("active", on); b.setAttribute("aria-selected", on);
+      });
+      tab === "rules" ? renderRules() : renderRuns();
+    }
+
+    const trig = (key) => data.catalog.triggers.find((t) => t.key === key);
+    const recLabel = (k) => (data.catalog.recipients.find((r) => r.key === k) || {}).label || k;
+
+    function cfgText(r) {
+      const t = trig(r.trigger), parts = [];
+      t.fields.forEach((f) => {
+        const v = r.config[f.key];
+        parts.push(`${f.label}: ${f.type === "select" ? (f.options.find((o) => o[0] === v) || [, v])[1] : v}`);
+      });
+      if (r.action === "NOTIFY") parts.push(`Avisa: ${recLabel(r.config.recipients)}`);
+      else parts.push(`Tarefa “${r.config.taskTitle}” em ${r.config.taskDueDays} dia(s)`);
+      return parts.join(" · ");
+    }
+
+    function renderRules() {
+      const p = document.getElementById("panel");
+      p.innerHTML = `<table class="grid"><thead><tr><th>Regra</th><th>Quando</th><th>Então</th><th class="num">Execuções</th><th>Ativa</th><th></th></tr></thead><tbody>
+        ${data.rules.map((r) => `<tr>
+          <td><strong>${esc(r.name)}</strong><div class="cfg-line">${esc(cfgText(r))}</div></td>
+          <td>${esc(r.triggerLabel)}<div class="muted">${esc(trig(r.trigger).kind)}</div></td>
+          <td>${esc(r.actionLabel)}</td>
+          <td class="num">${r.runCount}<div class="muted">${r.lastRunAt ? timeAgo(r.lastRunAt) : "nunca"}</div></td>
+          <td><label class="sw"><input type="checkbox" data-toggle="${r.id}" ${r.active ? "checked" : ""} ${data.canManage ? "" : "disabled"} aria-label="Ativar ${esc(r.name)}" />${r.active ? "Ativa" : "Pausada"}</label></td>
+          <td style="white-space:nowrap">${data.canManage ? `<button class="btn" data-edit="${r.id}">Editar</button> <button class="btn btn-danger" data-del="${r.id}">Excluir</button>` : ""}</td></tr>`).join("")}
+        </tbody></table>`;
+      p.querySelectorAll("[data-toggle]").forEach((c) => c.addEventListener("change", async () => {
+        try { await api(`/automations/${c.dataset.toggle}`, { method: "PATCH", body: { active: c.checked } }); await load(); }
+        catch (e) { toast(e.message, "err"); load(); }
+      }));
+      p.querySelectorAll("[data-edit]").forEach((b) => b.addEventListener("click", () => openDialog(data.rules.find((r) => r.id == b.dataset.edit))));
+      p.querySelectorAll("[data-del]").forEach((b) => b.addEventListener("click", async () => {
+        if (!confirm("Excluir esta regra e o histórico dela?")) return;
+        try { await api(`/automations/${b.dataset.del}`, { method: "DELETE" }); toast("Regra excluída."); load(); }
+        catch (e) { toast(e.message, "err"); }
+      }));
+    }
+
+    async function renderRuns() {
+      const p = document.getElementById("panel");
+      try {
+        const r = await api(`/automations/runs?page=${runsPage}&size=15${runsRule ? "&ruleId=" + runsRule : ""}`);
+        p.innerHTML = `<div class="toolbar"><select id="rf" aria-label="Regra"><option value="">Todas as regras</option>
+          ${data.rules.map((x) => `<option value="${x.id}" ${String(x.id) === String(runsRule) ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select></div>
+          ${r.content.length ? `<table class="grid"><thead><tr><th>Quando</th><th>Regra</th><th>Alvo</th><th>Resultado</th></tr></thead><tbody>
+          ${r.content.map((x) => `<tr><td>${fmtDateTime(x.createdAt)}</td><td>${esc(x.ruleName)}</td><td>${esc(x.entityName || "—")}</td>
+            <td class="${x.status === "OK" ? "run-ok" : "run-err"}">${x.status === "OK" ? "✓" : "✕ Erro:"} ${esc(x.message || "")}</td></tr>`).join("")}</tbody></table>` : `<div class="empty">Nenhuma execução ainda.</div>`}
+          <div class="pager"><span>${r.totalElements} execuções</span><div>
+          <button class="btn" id="rp" ${r.page === 0 ? "disabled" : ""}>Anterior</button><button class="btn" id="rn" ${r.page + 1 >= r.totalPages ? "disabled" : ""}>Próxima</button></div></div>`;
+        p.querySelector("#rf").addEventListener("change", (e) => { runsRule = e.target.value; runsPage = 0; renderRuns(); });
+        p.querySelector("#rp").addEventListener("click", () => { runsPage--; renderRuns(); });
+        p.querySelector("#rn").addEventListener("click", () => { runsPage++; renderRuns(); });
+      } catch (e) { toast(e.message, "err"); }
+    }
+
+    // ---------- criar / editar ----------
+    function openDialog(rule) {
+      const dlg = document.getElementById("ruleDlg");
+      const editing = !!rule;
+      dlg.innerHTML = `
+        <h2>${editing ? "Editar regra" : "Nova regra"}</h2>
+        <form id="ruleForm" novalidate>
+          <label>Nome<input name="name" required minlength="3" maxlength="80" value="${esc(rule?.name || "")}" /></label>
+          <div class="form-grid">
+            <label>Quando (gatilho)<select name="trigger" ${editing ? "disabled" : ""}>${data.catalog.triggers.map((t) => `<option value="${t.key}" ${rule?.trigger === t.key ? "selected" : ""}>${esc(t.label)}</option>`).join("")}</select></label>
+            <label>Então (ação)<select name="action" ${editing ? "disabled" : ""}>${data.catalog.actions.map((a) => `<option value="${a.key}" ${rule?.action === a.key ? "selected" : ""}>${esc(a.label)}</option>`).join("")}</select></label>
+          </div>
+          <p class="field-help" id="trigHelp"></p>
+          <div id="dyn"></div>
+          <p class="error" id="ruleErr" role="alert"></p>
+          <div class="modal-actions"><button type="button" class="btn" id="cancel">Cancelar</button><button class="btn btn-primary" type="submit">Salvar</button></div>
+        </form>`;
+      const form = dlg.querySelector("#ruleForm");
+      const cur = () => ({ trigger: rule?.trigger || form.trigger.value, action: rule?.action || form.action.value });
+      const drawDynamic = () => {
+        const { trigger, action } = cur(), t = trig(trigger), cfg = rule?.config || {};
+        dlg.querySelector("#trigHelp").textContent = t.description;
+        dlg.querySelector("#dyn").innerHTML = t.fields.map((f) => {
+          const v = cfg[f.key] ?? f.default;
+          return f.type === "select"
+            ? `<label>${esc(f.label)}<select name="cfg_${f.key}">${f.options.map((o) => `<option value="${o[0]}" ${o[0] === v ? "selected" : ""}>${esc(o[1])}</option>`).join("")}</select></label>`
+            : `<label>${esc(f.label)}<input type="number" name="cfg_${f.key}" min="${f.min}" max="${f.max}" value="${v}" /></label>`;
+        }).join("") + (action === "NOTIFY"
+          ? `<label>Quem recebe<select name="recipients">${data.catalog.recipients.map((r) => `<option value="${r.key}" ${(cfg.recipients || "OWNER") === r.key ? "selected" : ""}>${esc(r.label)}</option>`).join("")}</select></label>
+             <p class="field-help">Se o item não tiver responsável, os gerentes recebem.</p>`
+          : `<label>Título da tarefa<input name="taskTitle" maxlength="120" value="${esc(cfg.taskTitle || "Acompanhar {name}")}" /></label>
+             <p class="field-help">Use {name} para o nome do lead, oportunidade ou cliente. A tarefa vai para o responsável.</p>
+             <label>Prazo da tarefa (dias)<input type="number" name="taskDueDays" min="0" max="60" value="${cfg.taskDueDays ?? 1}" /></label>`);
+      };
+      drawDynamic();
+      if (!editing) { form.trigger.addEventListener("change", drawDynamic); form.action.addEventListener("change", drawDynamic); }
+      dlg.querySelector("#cancel").addEventListener("click", () => dlg.close());
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const { trigger, action } = cur(), t = trig(trigger), config = {};
+        t.fields.forEach((f) => { const el = form["cfg_" + f.key]; config[f.key] = f.type === "number" ? Number(el.value) : el.value; });
+        if (action === "NOTIFY") config.recipients = form.recipients.value;
+        else { config.taskTitle = form.taskTitle.value; config.taskDueDays = Number(form.taskDueDays.value); }
+        try {
+          if (editing) await api(`/automations/${rule.id}`, { method: "PATCH", body: { name: form.name.value, config } });
+          else await api("/automations", { method: "POST", body: { name: form.name.value, trigger, action, config } });
+          dlg.close(); toast("Regra salva."); load();
+        } catch (err) { dlg.querySelector("#ruleErr").textContent = err.message; }
+      });
+      dlg.showModal();
+    }
+    init();
+  </script>
+</body>
+</html>
