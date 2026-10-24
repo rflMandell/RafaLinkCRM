@@ -9,6 +9,7 @@ from ..errors import AppError
 from ..events import publish
 from ..security import get_current_user
 from ..services import check_owner as _check_owner, check_campaign, convert_lead
+from ..scoring import rescore_lead
 
 router = APIRouter(prefix="/leads", tags=["Leads"])
 
@@ -161,6 +162,7 @@ def _change_status(db, user, lead_id: int, new_status: str, reason: str | None =
         )
     if new_status == "CONVERTIDO":
         convert_lead(db, user, lead)  # RN04: cria contato (e empresa) a partir do lead
+    rescore_lead(db, user["organization_id"], lead_id)
 
     now = now_iso()
     touched = now if new_status in INTERACTION_STATUSES else None
@@ -288,6 +290,7 @@ def create_lead(data: LeadCreate, db=Depends(get_db), user=Depends(get_current_u
     )
     lead_id = cur.lastrowid
     publish(db, user, "LeadCreated", "lead", lead_id, {"name": data.name})
+    rescore_lead(db, user["organization_id"], lead_id)
     db.commit()
     return to_dto(_get_lead(db, user, lead_id))
 
@@ -322,6 +325,7 @@ def update_lead(lead_id: int, data: LeadUpdate, db=Depends(get_db), user=Depends
         params += [now_iso(), lead_id]
         db.execute(f"UPDATE leads SET {', '.join(sets)} WHERE id = ?", params)
         publish(db, user, "LeadUpdated", "lead", lead_id, {"fields": list(changes.keys())})
+        rescore_lead(db, user["organization_id"], lead_id)
         db.commit()
     return to_dto(_get_lead(db, user, lead_id))
 

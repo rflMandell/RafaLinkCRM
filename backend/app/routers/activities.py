@@ -10,6 +10,7 @@ from ..errors import AppError
 from ..events import publish
 from ..security import get_current_user
 from ..services import check_owner, parse_sort, to_utc_iso
+from ..scoring import rescore_lead
 
 router = APIRouter(prefix="/activities", tags=["Activities"])
 agenda_router = APIRouter(prefix="/agenda", tags=["Agenda"])

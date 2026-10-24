@@ -26,6 +26,7 @@ const MENU = [
   { key: "forecast", label: "Forecast", href: "forecast.html" },
   { key: "goals", label: "Metas", href: "goals.html" },
   { key: "sla", label: "SLA", href: "sla.html" },
+    { key: "ai", label: "IA", href: "ai.html" },
   { key: "settings", label: "Configurações", stage: 10 },
 ];
 

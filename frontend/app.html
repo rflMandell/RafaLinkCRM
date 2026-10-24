@@ -11,6 +11,7 @@
 
   <script src="js/api.js"></script>
   <script src="js/ui.js"></script>
+  <script src="js/ai-ui.js"></script>
   <script src="js/charts.js"></script>
   <script>
     const PERIODS = [[7, "Últimos 7 dias"], [30, "Últimos 30 dias"], [90, "Últimos 90 dias"], [365, "Últimos 12 meses"]];
@@ -45,6 +46,7 @@
           </div>
         </div>`;
 
+
       document.getElementById("period").addEventListener("change", (e) => {
         days = Number(e.target.value);
         try { localStorage.setItem("rafalink_period", String(days)); } catch {}
@@ -53,7 +55,7 @@
 
       // ---- situação atual (não depende do filtro de período) ----
       try {
-        const [health, total, novos, qualificados, companies, contacts, opps, tasks, goals, sla] = await Promise.all([
+        const [health, total, novos, qualificados, companies, contacts, opps, tasks, goals, sla, ai] = await Promise.all([
           api("/health"),
           api("/leads?size=1"),
           api("/leads?size=1&status=NOVO"),
@@ -65,6 +67,7 @@
           api("/activities/summary"),
           api("/goals"),
           api("/sla"),
+          api("/ai/overview"),
         ]);
         const revGoal = goals.goals.find((g) => g.metric === "REVENUE" && g.ownerId === null);
         document.getElementById("cards").innerHTML =
@@ -82,7 +85,10 @@
           card("Minhas tarefas pendentes", tasks.pending) +
           card("Minhas tarefas atrasadas", tasks.overdue, tasks.overdue > 0 ? "bad" : "") +
           card("Meta de receita do mês", revGoal ? NF_1.format(revGoal.attainment) + "%" : "—") +
-          card("Violações de SLA", sla.totalBreached, sla.totalBreached > 0 ? "bad" : "ok");
+          card("Violações de SLA", sla.totalBreached, sla.totalBreached > 0 ? "bad" : "ok") +
+          card("Leads quentes (IA)", ai.summary.leads.QUENTE) +
+          card("Clientes em risco alto (IA)", ai.summary.churn.ALTO, ai.summary.churn.ALTO > 0 ? "bad" : "ok") +
+          card("Ações prioritárias (IA)", ai.summary.actions.ALTA, ai.summary.actions.ALTA > 0 ? "bad" : "ok");
       } catch (err) {
         document.getElementById("cards").innerHTML = card("Status da API", "OFFLINE", "bad");
       }

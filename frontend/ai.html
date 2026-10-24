@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RafaLink CRM - IA</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="app"></div>
+
+  <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/charts.js"></script>
+  <script src="js/ai-ui.js"></script>
+  <script>
+    let data = null;
+    let tab = "actions";
+    let owner = "";
+    try { tab = localStorage.getItem("rafalink_ai_tab") || "actions"; } catch {}
+
+    const TABS = [["actions", "Fila de ações"], ["leads", "Leads por nota"], ["churn", "Risco de churn"], ["weights", "Regras e pesos"]];
+
+    async function init() {
+      const content = renderLayout("ai", "IA");
+      content.innerHTML = `
+        <div class="page-head"><h2>IA simulada</h2>
+          <div class="toolbar" style="margin:0">
+            <select id="owner" aria-label="Responsável" hidden></select>
+            <button class="btn" id="rescore">Recalcular notas dos leads</button>
+          </div></div>
+        <div class="tiles" id="tiles"></div>
+        <div class="ai-tabs" role="tablist">${TABS.map(([k, l]) => `<button role="tab" data-tab="${k}">${l}</button>`).join("")}</div>
+        <div id="panel"></div>
+        <p class="note">Esta IA é simulada: não há modelo de aprendizado. São regras e pesos configuráveis, e cada resultado mostra os motivos.</p>`;
+
+      content.querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => {
+        tab = b.dataset.tab;
+        try { localStorage.setItem("rafalink_ai_tab", tab); } catch {}
+        render();
+      }));
+      document.getElementById("owner").addEventListener("change", (e) => { owner = e.target.value; load(); });
+      document.getElementById("rescore").addEventListener("click", async () => {
+        try {
+          const r = await api("/ai/leads/rescore", { method: "POST" });
+          toast(`${r.updated} lead(s) recalculados, ${r.changed} com nota diferente.`);
+          load();
+        } catch (e) { toast(e.message, "err"); }
+      });
+      load();
+    }
+
+    async function load() {
+      try {
+        data = await api("/ai/overview" + (owner ? `?owner=${owner}` : ""));
+      } catch (e) { toast(e.message, "err"); return; }
+      const sel = document.getElementById("owner");
+      if (data.owners.length && sel.options.length === 0) {
+        sel.innerHTML = `<option value="">Toda a equipe</option>` + data.owners.map((o) => `<option value="${o.id}">${esc(o.name)}</option>`).join("");
+        sel.hidden = false;
+      }
+      const s = data.summary;
+      document.getElementById("tiles").innerHTML =
+        tile("Ações prioritárias", s.actions.ALTA, `${s.actions.total} ações no total`) +
+        tile("Leads quentes", s.leads.QUENTE, `${s.leads.total} leads pontuados · nota média ${s.leads.avgScore ?? "—"}`) +
+        tile("Clientes com risco alto", s.churn.ALTO, `${s.churn.customers} clientes monitorados`) +
+        tile("Notas desatualizadas", s.leads.outdated, s.leads.outdated ? "use “Recalcular notas”" : "tudo em dia");
+      render();
+    }
+    const tile = (label, value, sub) =>
+      `<div class="tile"><div class="label">${esc(label)}</div><div class="value">${esc(value)}</div><div class="delta">${esc(sub)}</div></div>`;
+
+    function render() {
+      document.querySelectorAll("[data-tab]").forEach((b) => {
+        const on = b.dataset.tab === tab;
+        b.classList.toggle("active", on); b.setAttribute("aria-selected", on);
+      });
+      const p = document.getElementById("panel");
+      if (tab === "actions") renderActions(p);
+      else if (tab === "leads") renderLeads(p);
+      else if (tab === "churn") renderChurn(p);
+      else renderWeights(p);
+    }
+
+    function renderActions(p) {
+      const rows = data.worklist;
+      if (!rows.length) { p.innerHTML = `<div class="empty">Nenhuma ação pendente. Tudo em dia.</div>`; return; }
+      p.innerHTML = `<table class="grid"><thead><tr><th>Prioridade</th><th>O que fazer</th><th>Quem</th><th>Responsável</th></tr></thead><tbody>
+        ${rows.map((a) => `<tr>
+          <td>${priorityPill(a.priority)}</td>
+          <td><strong>${esc(a.title)}</strong><div class="muted">${esc(a.reason)}</div></td>
+          <td>${aiLink(a.entity, a.entityId, a.name)}<div class="muted">${esc(a.context)}</div></td>
+          <td>${esc(a.ownerName || "—")}</td></tr>`).join("")}</tbody></table>`;
+    }
+
+    async function renderLeads(p) {
+      p.innerHTML = `<div class="toolbar"><select id="lvl" aria-label="Temperatura"><option value="">Todas as temperaturas</option>
+        <option value="QUENTE">Quente</option><option value="MORNO">Morno</option><option value="FRIO">Frio</option></select></div><div id="tbl"></div>`;
+      const sel = p.querySelector("#lvl");
+      const draw = async () => {
+        const q = [sel.value && "level=" + sel.value, owner && "owner=" + owner].filter(Boolean).join("&");
+        const r = await api("/ai/leads" + (q ? "?" + q : ""));
+        p.querySelector("#tbl").innerHTML = r.content.length ? `<table class="grid"><thead><tr><th>Lead</th><th>Status</th><th>Nota</th><th>Temperatura</th><th>Próxima ação</th></tr></thead><tbody>
+          ${r.content.map((l) => `<tr>
+            <td>${aiLink("lead", l.id, l.name)}<div class="muted">${esc(l.company || "")}</div></td>
+            <td>${statusBadge(l.status)}</td>
+            <td style="min-width:120px"><span class="score">${l.score}</span>${aiMeter(l.score, LEVEL_UI[l.level][1])}</td>
+            <td>${aiPill(LEVEL_UI, l.level)}</td>
+            <td>${esc(l.action.title)}</td></tr>`).join("")}</tbody></table>` : `<div class="empty">Nenhum lead nesta faixa.</div>`;
+      };
+      sel.addEventListener("change", draw); draw();
+    }
+
+    function renderChurn(p) {
+      const rows = data.churnRisk;
+      p.innerHTML = rows.length ? `<table class="grid"><thead><tr><th>Cliente</th><th>Risco</th><th>Nível</th><th>Principal sinal</th><th>Próxima ação</th></tr></thead><tbody>
+        ${rows.map((c) => `<tr>
+          <td>${aiLink("company", c.id, c.name)}<div class="muted">${esc(c.ownerName || "")}</div></td>
+          <td style="min-width:120px"><span class="score">${c.risk}</span>${aiMeter(c.risk, CHURN_UI[c.level][1])}</td>
+          <td>${aiPill(CHURN_UI, c.level)}</td>
+          <td>${esc(c.topFactor || "—")}</td>
+          <td>${esc(c.action.title)}</td></tr>`).join("")}</tbody></table>
+        <p class="note">Mostrando os ${rows.length} clientes de maior risco. Cliente é a empresa do tipo Cliente ou com venda ganha.</p>`
+        : `<div class="empty">Nenhum cliente para monitorar ainda.</div>`;
+    }
+
+    async function renderWeights(p) {
+      const w = await api("/ai/weights");
+      const groups = { lead: "Score do lead", churn: "Risco de churn" };
+      p.innerHTML = `<p class="note" style="margin-top:0">Cortes fixos: lead quente ≥ ${w.thresholds.hot}, morno ≥ ${w.thresholds.warm}; churn alto ≥ ${w.thresholds.churnHigh}, médio ≥ ${w.thresholds.churnMid}.
+        ${w.canManage ? "Altere os pesos e salve para recalcular a IA." : "Só gerentes e administradores podem alterar os pesos."}</p>` +
+        Object.entries(groups).map(([g, title]) => `
+          <h3 class="section-title">${title}</h3>
+          <table class="grid"><thead><tr><th>Regra</th><th>Padrão</th><th>Peso</th></tr></thead><tbody>
+          ${w.weights.filter((x) => x.group === g).map((x) => `<tr class="weights-row">
+            <td>${esc(x.label)}${x.custom ? ` <span class="ai-pill pri-mid">alterado</span>` : ""}</td>
+            <td class="num">${x.default}</td>
+            <td><input type="number" step="1" min="${x.min}" max="${x.max}" value="${x.value}" data-key="${esc(x.key)}" ${w.canManage ? "" : "disabled"} aria-label="${esc(x.label)}" /></td></tr>`).join("")}
+          </tbody></table>`).join("") +
+        (w.canManage ? `<div class="actions"><button class="btn btn-primary" id="saveW">Salvar pesos</button><button class="btn" id="resetW">Restaurar padrão</button></div>` : "");
+      if (!w.canManage) return;
+      p.querySelector("#saveW").addEventListener("click", async () => {
+        const weights = {};
+        p.querySelectorAll("input[data-key]").forEach((i) => { weights[i.dataset.key] = Number(i.value); });
+        try { await api("/ai/weights", { method: "PUT", body: { weights } }); toast("Pesos salvos."); await load(); }
+        catch (e) { toast(e.message, "err"); }
+      });
+      p.querySelector("#resetW").addEventListener("click", async () => {
+        if (!confirm("Voltar todos os pesos ao padrão?")) return;
+        try { await api("/ai/weights", { method: "DELETE" }); toast("Pesos restaurados."); await load(); }
+        catch (e) { toast(e.message, "err"); }
+      });
+    }
+
+    init();
+  </script>
+</body>
+</html>

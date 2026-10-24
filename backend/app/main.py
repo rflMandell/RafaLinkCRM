@@ -9,9 +9,10 @@ from .database import run_migrations
 from .errors import register_error_handlers
 from .routers import (
     activities, auth, campaigns, companies, contacts, customers, forecast, goals, leads,
-    opportunities, pipelines, reports, sla,
+    opportunities, pipelines, reports, sla, ai,
 )
 from .seed import seed
+
 
 FRONTEND_DIR = Path(__file__).resolve().parents[2] / "frontend"
 
@@ -63,6 +64,7 @@ api_v1.include_router(reports.router)
 api_v1.include_router(forecast.router)
 api_v1.include_router(goals.router)
 api_v1.include_router(sla.router)
+api_v1.include_router(ai.router)
 app.include_router(api_v1)
 
 # O backend também serve o frontend: tudo em http://localhost:8000

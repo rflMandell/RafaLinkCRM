@@ -310,6 +310,21 @@ MIGRATIONS = [
         );
         """,
     ),
+    (
+        "V18__create_ai", 
+        """
+        ALTER TABLE leads ADD COLUMN score_factors TEXT;
+        ALTER TABLE leads ADD COLUMN scored_at TEXT;
+        CREATE TABLE ai_weights (
+            organization_id INTEGER NOT NULL REFERENCES organizations(id),
+            key TEXT NOT NULL,
+            value REAL NOT NULL,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (organization_id, key)
+        );
+        """
+    ),
+
 ]
 
 
