@@ -54,26 +54,48 @@ def convert_lead(db, user, lead) -> tuple[int, int | None, int | None]:
 
     company_id = None
     if lead["company"] and lead["company"].strip():
-        company_id, _ = find_or_create_company(db, user, lead["company"], owner_id)
+        company_id, _ = find_or_create_company(
+            db, user, lead["company"], owner_id
+        )
 
     now = now_iso()
+
+    # Cria o contato a partir dos dados do lead.
     cur = db.execute(
         "INSERT INTO contacts(organization_id, company_id, name, email, phone, owner_id, "
         "status, source_lead_id, created_at, updated_at) "
         "VALUES (?, ?, ?, ?, ?, ?, 'ATIVO', ?, ?, ?)",
         (
-            user["organization_id"], company_id, lead["name"], lead["email"],
-            lead["phone"], owner_id, lead["id"], now, now,
+            user["organization_id"],
+            company_id,
+            lead["name"],
+            lead["email"],
+            lead["phone"],
+            owner_id,
+            lead["id"],
+            now,
+            now,
         ),
     )
-    contact_id = cur.lastrowid
-    publish(db, user, "ContactCreated", "contact", contact_id,
-            {"leadId": lead["id"], "origin": "lead_conversion"})
 
-    # Oportunidade na primeira etapa do pipeline padrão (valor 0: o vendedor ajusta depois)
+    contact_id = cur.lastrowid
+
+    publish(
+        db,
+        user,
+        "ContactCreated",
+        "contact",
+        contact_id,
+        {"leadId": lead["id"], "origin": "lead_conversion"},
+    )
+
+    # Cria uma oportunidade na primeira etapa aberta do pipeline padrão.
+    # O valor inicial é zero para que o vendedor possa ajustá-lo depois.
     opportunity_id = None
+
     pipeline = get_default_pipeline(db, user["organization_id"])
     stage = first_open_stage(db, pipeline["id"]) if pipeline else None
+
     if stage:
         cur = db.execute(
             "INSERT INTO opportunities(organization_id, title, value, probability, status, "
@@ -81,16 +103,30 @@ def convert_lead(db, user, lead) -> tuple[int, int | None, int | None]:
             "stage_changed_at, created_at, updated_at) "
             "VALUES (?, ?, 0, ?, 'ABERTA', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
-                user["organization_id"], f"Oportunidade - {base}", stage["probability"],
-                stage["pipeline_id"], stage["id"], company_id, contact_id, owner_id,
-                lead["id"], lead["campaign_id"], now, now, now,
+                user["organization_id"],
+                f"Oportunidade - {lead['name']}",
+                stage["probability"],
+                stage["pipeline_id"],
+                stage["id"],
+                company_id,
+                contact_id,
+                owner_id,
+                lead["id"],
+                lead["campaign_id"],
+                now,
+                now,
+                now,
             ),
         )
 
+        opportunity_id = cur.lastrowid
+
+    # Vincula o contato, a empresa e a oportunidade ao lead convertido.
     db.execute(
         "UPDATE leads SET contact_id = ?, company_id = ?, opportunity_id = ? WHERE id = ?",
         (contact_id, company_id, opportunity_id, lead["id"]),
     )
+
     return contact_id, company_id, opportunity_id
 
 # ---------- Pipelines ----------
