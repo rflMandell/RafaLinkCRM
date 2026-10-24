@@ -27,7 +27,7 @@ const MENU = [
   { key: "goals", label: "Metas", href: "goals.html" },
   { key: "sla", label: "SLA", href: "sla.html" },
   { key: "ai", label: "IA", href: "ai.html" },
-  { key: "notifications", label: "Notificações", href: "notifications.html" },
+  //{ key: "notifications", label: "Notificações", href: "notifications.html" }, //ta bugada a pag, entao mais facil deixar off por enquanto
   { key: "automations", label: "Automação", href: "automations.html" },
   { key: "audit", label: "Auditoria", href: "audit.html" },
   { key: "settings", label: "Configurações", stage: 10 },
