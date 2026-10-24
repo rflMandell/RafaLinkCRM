@@ -373,6 +373,21 @@ MIGRATIONS = [
         CREATE INDEX idx_events_org ON domain_events(organization_id, id);
         """
     ),
+    (
+        "V20__create_role_permissions", 
+        """
+            CREATE TABLE role_permissions (
+                organization_id INTEGER NOT NULL REFERENCES organizations(id),
+                role TEXT NOT NULL,
+                permission TEXT NOT NULL,
+                allowed INTEGER NOT NULL,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (organization_id, role, permission)
+            );
+            CREATE INDEX IF NOT EXISTS idx_leads_org_email ON leads(organization_id, email);
+            CREATE INDEX IF NOT EXISTS idx_contacts_org_email ON contacts(organization_id, email);
+        """
+    ),
 
 ]
 

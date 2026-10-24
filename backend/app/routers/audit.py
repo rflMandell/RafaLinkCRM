@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, Query, Response
 
 from ..database import get_db
 from ..security import require_roles
+from ..permissions import require_perm
 
 router = APIRouter(prefix="/audit", tags=["Auditoria"])
 MANAGERS = ("ADMIN", "SALES_MANAGER")
@@ -22,11 +23,16 @@ EVENT_LABELS = {
     "SlaPolicyUpdated": "Política de SLA alterada",
     "AutomationRuleCreated": "Regra de automação criada", "AutomationRuleUpdated": "Regra de automação alterada",
     "AutomationRuleDeleted": "Regra de automação excluída", "AutomationExecuted": "Automação executada",
+    "UserCreated": "Usuário criado", "UserUpdated": "Usuário alterado",
+    "OrganizationUpdated": "Organização alterada", "PermissionChanged": "Permissão alterada",
+    "PermissionsReset": "Permissões restauradas", "ImportCompleted": "Importação CSV concluída",
+    "RecordsMerged": "Registros mesclados",
 }
 ENTITY_LABELS = {
     "lead": "Lead", "company": "Empresa", "contact": "Contato", "opportunity": "Oportunidade", "activity": "Atividade",
     "campaign": "Campanha", "goal": "Meta", "sla_policy": "SLA", "ai_weights": "Pesos da IA",
     "automation_rule": "Automação", "user": "Usuário", "pipeline": "Pipeline",
+    "organization": "Organização", "role_permission": "Permissões",
 }
 
 
@@ -71,7 +77,7 @@ SELECT = "SELECT e.*, u.name AS user_name FROM domain_events e LEFT JOIN users u
 def list_audit(entity: str | None = None, type: str | None = None, userId: int | None = None, q: str | None = None,
                dateFrom: date | None = None, dateTo: date | None = None,
                page: int = Query(0, ge=0), size: int = Query(25, ge=1, le=100),
-               db=Depends(get_db), user=Depends(require_roles(*MANAGERS))):
+               db=Depends(get_db), user=Depends(require_perm("audit.read"))):
     where, args = _filters(user["organization_id"], entity, type, userId, q, dateFrom, dateTo)
     total = db.execute(f"SELECT COUNT(*) FROM domain_events e WHERE {where}", args).fetchone()[0]
     rows = db.execute(f"{SELECT} WHERE {where} ORDER BY e.id DESC LIMIT ? OFFSET ?", args + [size, page * size]).fetchall()
@@ -80,7 +86,7 @@ def list_audit(entity: str | None = None, type: str | None = None, userId: int |
 
 
 @router.get("/options")
-def options(db=Depends(get_db), user=Depends(require_roles(*MANAGERS))):
+def options(db=Depends(get_db), user=Depends(require_perm("audit.read"))):
     org = user["organization_id"]
     types = [r[0] for r in db.execute("SELECT DISTINCT type FROM domain_events WHERE organization_id = ? ORDER BY type", (org,))]
     entities = [r[0] for r in db.execute("SELECT DISTINCT entity FROM domain_events WHERE organization_id = ? ORDER BY entity", (org,))]
@@ -93,7 +99,7 @@ def options(db=Depends(get_db), user=Depends(require_roles(*MANAGERS))):
 @router.get("/export")
 def export_csv(entity: str | None = None, type: str | None = None, userId: int | None = None, q: str | None = None,
                dateFrom: date | None = None, dateTo: date | None = None,
-               db=Depends(get_db), user=Depends(require_roles(*MANAGERS))):
+               db=Depends(get_db), user=Depends(require_perm("audit.read"))):
     where, args = _filters(user["organization_id"], entity, type, userId, q, dateFrom, dateTo)
     rows = db.execute(f"{SELECT} WHERE {where} ORDER BY e.id DESC LIMIT 5000", args).fetchall()
     buf = io.StringIO()

@@ -9,6 +9,7 @@ from ..database import get_db, now_iso
 from ..errors import AppError
 from ..events import publish
 from ..security import get_current_user, require_roles
+from ..permissions import require_perm
 
 router = APIRouter(prefix="/automations", tags=["Automações"])
 
@@ -64,7 +65,7 @@ def list_rules(db=Depends(get_db), user=Depends(get_current_user)):
 
 
 @router.post("", status_code=201)
-def create_rule(data: RuleCreate, db=Depends(get_db), user=Depends(require_roles(*MANAGER_ROLES))):
+def create_rule(data: RuleCreate, db=Depends(get_db), user=Depends(require_perm("automation.manage"))):
     _check_kinds(data.trigger, data.action)
     cfg = clean_config(data.trigger, data.action, data.config)
     cur = db.execute(
@@ -79,7 +80,7 @@ def create_rule(data: RuleCreate, db=Depends(get_db), user=Depends(require_roles
 
 
 @router.patch("/{rule_id}")
-def update_rule(rule_id: int, data: RuleUpdate, db=Depends(get_db), user=Depends(require_roles(*MANAGER_ROLES))):
+def update_rule(rule_id: int, data: RuleUpdate, db=Depends(get_db), user=Depends(require_perm("automation.manage"))):
     r = _get(db, user, rule_id)
     name = data.name.strip() if data.name else r["name"]
     active = r["active"] if data.active is None else (1 if data.active else 0)
@@ -95,7 +96,7 @@ def update_rule(rule_id: int, data: RuleUpdate, db=Depends(get_db), user=Depends
 
 
 @router.delete("/{rule_id}", status_code=204)
-def delete_rule(rule_id: int, db=Depends(get_db), user=Depends(require_roles(*MANAGER_ROLES))):
+def delete_rule(rule_id: int, db=Depends(get_db), user=Depends(require_perm("automation.manage"))):
     r = _get(db, user, rule_id)
     db.execute("DELETE FROM automation_runs WHERE rule_id = ?", (rule_id,))
     db.execute("DELETE FROM automation_rules WHERE id = ?", (rule_id,))

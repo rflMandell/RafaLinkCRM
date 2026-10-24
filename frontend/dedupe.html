@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RafaLink CRM - Duplicados</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="app"></div>
+  <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
+  <script>
+    let ENTITY = "leads";
+    const ENT = { leads: "Leads", companies: "Empresas", contacts: "Contatos" };
+    const SUB = { leads: (r) => [r.email, r.phone, r.company, r.status], companies: (r) => [r.website, r.phone, r.city, r.type], contacts: (r) => [r.email, r.phone, r.job_title, r.company] };
+
+    function init() {
+      const content = renderLayout("settings", "Duplicados");
+      content.innerHTML = `${settingsNav("dedupe")}<div class="ai-tabs" id="tabs">${Object.entries(ENT).map(([k, v]) => `<button data-e="${k}" class="${k === ENTITY ? "active" : ""}">${v}</button>`).join("")}</div><div id="list"></div>`;
+      document.querySelectorAll("#tabs button").forEach((b) => b.addEventListener("click", () => {
+        ENTITY = b.dataset.e; document.querySelectorAll("#tabs button").forEach((x) => x.classList.toggle("active", x === b)); load();
+      }));
+      load();
+    }
+
+    async function load() {
+      const box = document.getElementById("list");
+      box.innerHTML = `<div class="empty">Procurando…</div>`;
+      try {
+        const r = await api(`/dedupe/${ENTITY}`);
+        if (!r.groups.length) { box.innerHTML = `<div class="empty">Nenhum duplicado encontrado em ${ENT[ENTITY].toLowerCase()}. 🎉</div>`; return; }
+        const [la, lb] = r.linkLabels;
+        box.innerHTML = `<p class="muted">${r.totalGroups} grupo(s) de possíveis duplicados${r.totalGroups > r.groups.length ? ` (mostrando ${r.groups.length})` : ""}. Em cada grupo, escolha qual registro <strong>manter</strong>; os marcados serão unidos a ele (vínculos são transferidos e campos vazios preenchidos).</p>` +
+          r.groups.map((g, gi) => `<div class="dup-group" data-g="${gi}"><h4>${g.records.length} registros parecidos</h4>
+            <div class="dup-why">Motivo: ${esc(g.reasons.join(", "))}</div>
+            ${g.records.map((rec) => `<div class="dup-rec ${rec.id === g.suggestedKeepId ? "keep" : ""}" data-id="${rec.id}">
+              <input type="radio" name="keep${gi}" value="${rec.id}" title="Manter este" aria-label="Manter ${esc(rec.name)}" ${rec.id === g.suggestedKeepId ? "checked" : ""} />
+              <input type="checkbox" class="mg" title="Unir ao registro mantido" aria-label="Unir ${esc(rec.name)}" ${rec.id === g.suggestedKeepId ? "disabled" : "checked"} />
+              <div><strong>${esc(rec.name)}</strong> <span class="muted">#${rec.id}</span>
+                <div class="muted">${SUB[ENTITY](rec).filter(Boolean).map(esc).join(" · ") || "—"}</div>
+                <div class="muted">${rec.links.a} ${esc(la)} · ${rec.links.b} ${esc(lb)} · criado em ${fmtDate(rec.created_at)}</div></div></div>`).join("")}
+            <div class="modal-actions"><button class="btn btn-primary merge">Unir selecionados</button></div></div>`).join("");
+        box.querySelectorAll(".dup-group").forEach((el) => {
+          const radios = el.querySelectorAll("input[type=radio]");
+          radios.forEach((rd) => rd.addEventListener("change", () => {
+            el.querySelectorAll(".dup-rec").forEach((row) => {
+              const keep = row.dataset.id === rd.value; row.classList.toggle("keep", keep);
+              const cb = row.querySelector(".mg"); cb.disabled = keep; if (keep) cb.checked = false; else if (!cb.dataset.touched) cb.checked = true;
+            });
+          }));
+          el.querySelectorAll(".mg").forEach((c) => c.addEventListener("change", () => { c.dataset.touched = 1; }));
+          el.querySelector(".merge").addEventListener("click", () => merge(el));
+        });
+      } catch (e) { box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+    }
+
+    async function merge(el) {
+      const keepId = Number(el.querySelector("input[type=radio]:checked").value);
+      const mergeIds = [...el.querySelectorAll(".dup-rec")].filter((r) => r.querySelector(".mg").checked && !r.querySelector(".mg").disabled).map((r) => Number(r.dataset.id));
+      if (!mergeIds.length) return toast("Marque ao menos um registro para unir.", "err");
+      if (!confirm(`Unir ${mergeIds.length} registro(s) ao #${keepId}? Os registros unidos serão apagados e isso não pode ser desfeito.`)) return;
+      try {
+        const r = await api(`/dedupe/${ENTITY}/merge`, { method: "POST", body: { keepId, mergeIds } });
+        toast(`${r.merged} registro(s) unido(s).`); load();
+      } catch (e) { toast(e.message, "err"); }
+    }
+    init();
+  </script>
+</body>
+</html>

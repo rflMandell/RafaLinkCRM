@@ -12,6 +12,7 @@ from ..scoring import (
     score_lead, sla_limits,
 )
 from ..security import get_current_user, require_roles
+from ..permissions import require_perm
 
 router = APIRouter(prefix="/ai", tags=["IA simulada"])
 MANAGERS = ("ADMIN", "SALES_MANAGER")
@@ -221,7 +222,7 @@ def get_weights(db=Depends(get_db), user=Depends(get_current_user)):
 
 
 @router.put("/weights")
-def put_weights(data: WeightsUpdate, db=Depends(get_db), user=Depends(require_roles(*MANAGERS))):
+def put_weights(data: WeightsUpdate, db=Depends(get_db), user=Depends(require_perm("ai.weights"))):
     for key, value in data.weights.items():
         if key not in WEIGHTS:
             raise AppError(400, "UNKNOWN_WEIGHT", f"Peso desconhecido: {key}.")
@@ -244,7 +245,7 @@ def put_weights(data: WeightsUpdate, db=Depends(get_db), user=Depends(require_ro
 
 
 @router.delete("/weights")
-def reset_weights(db=Depends(get_db), user=Depends(require_roles(*MANAGERS))):
+def reset_weights(db=Depends(get_db), user=Depends(require_perm("ai.weights"))):
     db.execute("DELETE FROM ai_weights WHERE organization_id = ?", (user["organization_id"],))
     publish(db, user, "AiWeightsReset", "ai_weights", None, {})
     db.commit()

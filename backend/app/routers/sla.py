@@ -7,6 +7,7 @@ from ..database import get_db, now_iso
 from ..errors import AppError
 from ..events import publish
 from ..security import get_current_user, require_roles
+from ..permissions import require_perm
 
 router = APIRouter(prefix="/sla", tags=["SLA"])
 
@@ -166,7 +167,7 @@ def overview(owner: int | None = None, db=Depends(get_db), user=Depends(get_curr
 
 @router.put("/policies/{kind}")
 def update_policy(
-    kind: str, data: PolicyUpdate, db=Depends(get_db), user=Depends(require_roles(*MANAGERS))
+    kind: str, data: PolicyUpdate, db=Depends(get_db), user=Depends(require_perm("goals.manage"))
 ):
     if kind not in POLICIES:
         raise AppError(404, "SLA_POLICY_NOT_FOUND", "Política de SLA não encontrada.")

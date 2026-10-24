@@ -30,7 +30,7 @@ const MENU = [
   //{ key: "notifications", label: "Notificações", href: "notifications.html" }, //ta bugada a pag, entao mais facil deixar off por enquanto
   { key: "automations", label: "Automação", href: "automations.html" },
   { key: "audit", label: "Auditoria", href: "audit.html" },
-  { key: "settings", label: "Configurações", stage: 10 },
+  { key: "settings", label: "Configurações", href: "settings.html" },
 ];
 
 // Sempre use esc() ao colocar dados do usuário dentro de innerHTML (evita XSS).
@@ -79,6 +79,10 @@ function renderLayout(activeKey, title) {
       <main>
         <div class="topbar">
           <strong>${esc(title)}</strong>
+          <div class="gsearch" id="gsearch">
+            <input id="gsInput" type="search" placeholder="Buscar em tudo…  ( / )" aria-label="Busca global" autocomplete="off" />
+            <div class="gs-menu" id="gsMenu" hidden></div>
+          </div>
           <div class="topbar-right">
             <div class="bell-wrap">
               <button id="bellBtn" class="bell" aria-label="Notificações" aria-haspopup="true"><span aria-hidden="true">🔔</span><span class="bell-count" id="bellCount" hidden>0</span></button>
@@ -95,6 +99,7 @@ function renderLayout(activeKey, title) {
 
   document.getElementById("logoutBtn").addEventListener("click", logout);
   initBell();
+  initGlobalSearch();
   return document.getElementById("content");
 }
 
@@ -229,4 +234,43 @@ function initBell() {
   btn.addEventListener("refresh", refresh);   // outras páginas pedem atualização com btn.dispatchEvent(new Event("refresh"))
   refresh();
   setInterval(refresh, 30000);
+}
+
+// ---------- Etapa 10: busca global + navegação de Configurações ----------
+function initGlobalSearch() {
+  const input = document.getElementById("gsInput");
+  const menu = document.getElementById("gsMenu");
+  if (!input) return;
+  let timer, seq = 0;
+
+  async function run() {
+    const q = input.value.trim();
+    if (q.length < 2) { menu.hidden = true; return; }
+    const mine = ++seq;
+    try {
+      const r = await api(`/search?q=${encodeURIComponent(q)}&limit=5`);
+      if (mine !== seq) return;           // ignora resposta antiga
+      menu.innerHTML = r.groups.length ? r.groups.map((g) => `
+        <div class="gs-group">${esc(g.label)}</div>
+        ${g.items.map((i) => `<a class="gs-item" href="${esc(i.href)}"><strong>${esc(i.title)}</strong><span>${esc(i.subtitle || "")}</span></a>`).join("")}`).join("")
+        : `<div class="gs-empty">Nada encontrado para “${esc(q)}”.</div>`;
+      menu.hidden = false;
+    } catch (e) { menu.innerHTML = `<div class="gs-empty">${esc(e.message)}</div>`; menu.hidden = false; }
+  }
+  input.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(run, 250); });
+  input.addEventListener("focus", () => { if (input.value.trim().length >= 2) run(); });
+  document.addEventListener("click", (e) => { if (!document.getElementById("gsearch").contains(e.target)) menu.hidden = true; });
+  document.addEventListener("keydown", (e) => {
+    const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName) || document.activeElement?.isContentEditable;
+    if (e.key === "/" && !typing) { e.preventDefault(); input.focus(); }
+    if (e.key === "Escape") { menu.hidden = true; if (document.activeElement === input) input.blur(); }
+    if (e.key === "Enter" && document.activeElement === input) {
+      const first = menu.querySelector(".gs-item"); if (first) location.href = first.getAttribute("href");
+    }
+  });
+}
+
+function settingsNav(active) {
+  const tabs = [["settings.html", "Organização, usuários e permissões", "settings"], ["import.html", "Importar CSV", "import"], ["dedupe.html", "Duplicados", "dedupe"]];
+  return `<nav class="subnav">${tabs.map(([h, l, k]) => `<a href="${h}" class="${k === active ? "active" : ""}">${l}</a>`).join("")}</nav>`;
 }

@@ -9,7 +9,7 @@ from .database import run_migrations
 from .errors import register_error_handlers
 from .routers import (
     activities, auth, campaigns, companies, contacts, customers, forecast, goals, leads,
-    opportunities, pipelines, reports, sla, ai, automations, audit, notifications,
+    opportunities, pipelines, reports, sla, ai, automations, audit, notifications, settings, search, importer, dedupe
 )
 from .seed import seed
 from .worker import start_worker
@@ -69,7 +69,11 @@ api_v1.include_router(ai.router)
 api_v1.include_router(notifications.router)
 api_v1.include_router(automations.router)
 api_v1.include_router(audit.router)
-app.include_router(api_v1)
+api_v1.include_router(settings.router)
+api_v1.include_router(search.router)
+api_v1.include_router(importer.router)
+api_v1.include_router(dedupe.router)
+app_.include_router(api_v1)
 
 # O backend também serve o frontend: tudo em http://localhost:8000
 # (precisa ficar DEPOIS das rotas da API)

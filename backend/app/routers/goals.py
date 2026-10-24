@@ -9,6 +9,7 @@ from ..errors import AppError
 from ..events import publish
 from ..security import get_current_user, require_roles
 from ..services import check_owner
+from ..permissions import require_perm
 
 router = APIRouter(prefix="/goals", tags=["Goals"])
 
@@ -186,7 +187,7 @@ def list_goals(
 
 
 @router.post("", status_code=201)
-def create_goal(data: GoalCreate, db=Depends(get_db), user=Depends(require_roles(*MANAGERS))):
+def create_goal(data: GoalCreate, db=Depends(get_db), user=Depends(require_perm("goals.manage"))):
     org = user["organization_id"]
     check_owner(db, user, data.ownerId)
     start, _ = period_bounds(data.periodType, data.periodStart)
@@ -212,7 +213,7 @@ def create_goal(data: GoalCreate, db=Depends(get_db), user=Depends(require_roles
 
 
 @router.patch("/{goal_id}")
-def update_goal(goal_id: int, data: GoalUpdate, db=Depends(get_db), user=Depends(require_roles(*MANAGERS))):
+def update_goal(goal_id: int, data: GoalUpdate, db=Depends(get_db), user=Depends(require_perm("goals.manage"))):
     _get(db, user, goal_id)
     db.execute("UPDATE goals SET target = ?, updated_at = ? WHERE id = ?", (data.target, now_iso(), goal_id))
     publish(db, user, "GoalUpdated", "goal", goal_id, {"target": data.target})
@@ -221,7 +222,7 @@ def update_goal(goal_id: int, data: GoalUpdate, db=Depends(get_db), user=Depends
 
 
 @router.delete("/{goal_id}", status_code=204)
-def delete_goal(goal_id: int, db=Depends(get_db), user=Depends(require_roles(*MANAGERS))):
+def delete_goal(goal_id: int, db=Depends(get_db), user=Depends(require_perm("goals.manage"))):
     _get(db, user, goal_id)
     db.execute("DELETE FROM goals WHERE id = ?", (goal_id,))
     publish(db, user, "GoalDeleted", "goal", goal_id, {})

@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RafaLink CRM - Importar CSV</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="app"></div>
+  <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
+  <script>
+    const ENT = { leads: "Leads", companies: "Empresas", contacts: "Contatos" };
+    const S = { entity: "leads", csv: "", fileName: "", mapping: null, preview: null, policy: "SKIP", createCompanies: true };
+
+    function init() {
+      renderLayout("settings", "Importar CSV");
+      step(1);
+    }
+    const root = () => document.getElementById("content");
+    function frame(n, inner) {
+      const names = ["Arquivo", "Colunas", "Análise", "Resultado"];
+      root().innerHTML = `${settingsNav("import")}<div class="steps">${names.map((t, i) => `<span class="${i + 1 === n ? "on" : ""}">${i + 1}. ${t}</span>`).join("")}</div>${inner}`;
+    }
+
+    function step(n, extra) {
+      if (n === 1) {
+        frame(1, `<div class="card-block"><h3>O que você quer importar?</h3>
+          <label>Tipo de registro</label><select id="entity">${Object.entries(ENT).map(([k, v]) => `<option value="${k}" ${k === S.entity ? "selected" : ""}>${v}</option>`).join("")}</select>
+          <label>Arquivo CSV</label><input type="file" id="file" accept=".csv,text/csv,text/plain" />
+          <p class="field-help">Aceita separador vírgula, ponto e vírgula ou tab. A primeira linha deve ter os nomes das colunas. Máximo de 2.000 linhas.</p>
+          <div class="modal-actions"><button class="btn btn-primary" id="next" ${S.csv ? "" : "disabled"}>Continuar</button></div>
+          ${S.fileName ? `<p class="note">Arquivo carregado: <strong>${esc(S.fileName)}</strong></p>` : ""}</div>`);
+        document.getElementById("entity").addEventListener("change", (e) => { S.entity = e.target.value; S.mapping = null; });
+        document.getElementById("file").addEventListener("change", async (e) => {
+          const f = e.target.files[0]; if (!f) return;
+          S.csv = await f.text(); S.fileName = f.name; S.mapping = null;
+          document.getElementById("next").disabled = false;
+        });
+        document.getElementById("next").addEventListener("click", () => analyze(2));
+      }
+      if (n === 2) {
+        const p = S.preview;
+        frame(2, `<div class="card-block"><h3>Ligue as colunas do arquivo aos campos</h3>
+          <p class="muted">${p.totalRows} linhas · ${p.columns.length} colunas · separador “${p.delimiter === "\t" ? "tab" : esc(p.delimiter)}”</p>
+          ${p.fields.map((f) => `<div class="map-row"><label>${esc(f.label)}${f.required ? " *" : ""}</label>
+            <select data-f="${f.key}"><option value="">— ignorar —</option>${p.columns.map((c) => `<option value="${esc(c)}" ${S.mapping[f.key] === c ? "selected" : ""}>${esc(c)}</option>`).join("")}</select></div>`).join("")}
+          ${p.ready ? "" : `<p class="field-help" style="color:var(--danger)">Escolha a coluna do nome para continuar.</p>`}
+          <div class="modal-actions"><button class="btn" id="back">Voltar</button><button class="btn btn-primary" id="next" ${p.ready ? "" : "disabled"}>Analisar</button></div></div>`);
+        document.querySelectorAll("select[data-f]").forEach((s) => s.addEventListener("change", () => {
+          S.mapping = {}; document.querySelectorAll("select[data-f]").forEach((x) => { if (x.value) S.mapping[x.dataset.f] = x.value; });
+          analyze(2);
+        }));
+        document.getElementById("back").addEventListener("click", () => step(1));
+        document.getElementById("next").addEventListener("click", () => step(3));
+      }
+      if (n === 3) {
+        const p = S.preview, s = p.summary;
+        const stLabel = { DUPLICATE: "Já existe", DUP_IN_FILE: "Repetido no arquivo", ERROR: "Erro" };
+        frame(3, `<div class="card-block"><h3>Análise do arquivo</h3>
+          <div class="sum-grid"><div><b>${s.total}</b>linhas</div><div><b>${s.ok}</b>novas e válidas</div><div><b>${s.duplicates}</b>já existem</div><div><b>${s.dupInFile}</b>repetidas no arquivo</div><div><b>${s.errors}</b>com erro</div></div>
+          ${p.problems.length ? `<details class="payload" open><summary>Ver problemas (${p.problems.length}${p.problems.length >= 100 ? "+" : ""})</summary>
+            <table class="grid"><thead><tr><th>Linha</th><th>Nome</th><th>Situação</th><th>Detalhes</th></tr></thead><tbody>
+            ${p.problems.map((x) => `<tr><td>${x.row}</td><td>${esc(x.name || "—")}</td><td>${esc(stLabel[x.status] || "Aviso")}</td><td>${esc((x.messages || []).join("; "))}${x.match ? ` <span class="muted">(já existe: ${esc(x.match.name || "#" + x.match.id)})</span>` : ""}</td></tr>`).join("")}</tbody></table></details>` : ""}
+          <h3 style="margin-top:16px">Se o registro já existir…</h3>
+          ${[["SKIP", "Ignorar", "Mantém o que já está no CRM (recomendado)."], ["UPDATE", "Atualizar", "Preenche com os dados do arquivo."], ["CREATE", "Criar mesmo assim", "Cria outro registro (pode gerar duplicados)."]].map(([v, t, d]) =>
+            `<label class="opt"><input type="radio" name="pol" value="${v}" ${S.policy === v ? "checked" : ""} /><span><strong>${t}</strong><br><span class="muted">${d}</span></span></label>`).join("")}
+          ${S.entity === "contacts" ? `<label class="sw"><input type="checkbox" id="cc" ${S.createCompanies ? "checked" : ""} /> Criar empresas que ainda não existirem</label>` : ""}
+          <p class="note">Linhas com erro nunca são importadas. Tudo é gravado de uma vez: se algo falhar, nada é salvo.</p>
+          <div class="modal-actions"><button class="btn" id="back">Voltar</button><button class="btn btn-primary" id="go" ${s.total - s.errors ? "" : "disabled"}>Importar agora</button></div></div>`);
+        document.querySelectorAll("input[name=pol]").forEach((r) => r.addEventListener("change", () => { S.policy = r.value; }));
+        const cc = document.getElementById("cc"); if (cc) cc.addEventListener("change", () => { S.createCompanies = cc.checked; });
+        document.getElementById("back").addEventListener("click", () => step(2));
+        document.getElementById("go").addEventListener("click", commit);
+      }
+      if (n === 4) {
+        const r = extra;
+        frame(4, `<div class="card-block"><h3>Importação concluída</h3>
+          <div class="sum-grid"><div><b>${r.created}</b>criados</div><div><b>${r.updated}</b>atualizados</div><div><b>${r.skipped}</b>ignorados</div><div><b>${r.errors}</b>com erro</div>${r.companiesCreated ? `<div><b>${r.companiesCreated}</b>empresas criadas</div>` : ""}</div>
+          <div class="modal-actions"><button class="btn" id="again">Importar outro arquivo</button><a class="btn btn-primary" href="${{ leads: "leads.html", companies: "companies.html", contacts: "contacts.html" }[S.entity]}">Ver ${ENT[S.entity]}</a></div></div>`);
+        document.getElementById("again").addEventListener("click", () => { S.csv = ""; S.fileName = ""; S.mapping = null; step(1); });
+      }
+    }
+
+    async function analyze(goTo) {
+      try {
+        const p = await api("/import/preview", { method: "POST", body: { entity: S.entity, csv: S.csv, ...(S.mapping ? { mapping: S.mapping } : {}) } });
+        S.preview = p; S.mapping = p.mapping; step(goTo);
+      } catch (e) { toast(e.message, "err"); }
+    }
+    async function commit() {
+      const btn = document.getElementById("go"); btn.disabled = true; btn.textContent = "Importando…";
+      try {
+        const r = await api("/import/commit", { method: "POST", body: { entity: S.entity, csv: S.csv, mapping: S.mapping, onDuplicate: S.policy, createCompanies: S.createCompanies } });
+        toast("Importação concluída."); step(4, r);
+      } catch (e) { toast(e.message, "err"); btn.disabled = false; btn.textContent = "Importar agora"; }
+    }
+    init();
+  </script>
+</body>
+</html>

@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RafaLink CRM - Configurações</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="app"></div>
+  <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
+  <script>
+    let ME, TAB = "org";
+    async function init() {
+      const content = renderLayout("settings", "Configurações");
+      try { ME = await api("/settings/me"); } catch (e) { content.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+      content.innerHTML = `${settingsNav("settings")}
+        <div class="ai-tabs" id="tabs">
+          <button data-t="org" class="active">Organização</button>
+          <button data-t="users">Usuários</button>
+          <button data-t="perms">Permissões</button>
+        </div><div id="pane"></div>`;
+      document.querySelectorAll("#tabs button").forEach((b) => b.addEventListener("click", () => {
+        TAB = b.dataset.t; document.querySelectorAll("#tabs button").forEach((x) => x.classList.toggle("active", x === b)); show();
+      }));
+      show();
+    }
+    const show = () => ({ org: orgTab, users: usersTab, perms: permsTab })[TAB]();
+    const can = (k) => ME.permissions.includes(k);
+    const denied = (p) => (p.innerHTML = `<div class="empty">Você não tem permissão para ver esta aba. Fale com um administrador.</div>`);
+
+    async function orgTab() {
+      const pane = document.getElementById("pane");
+      try {
+        const o = await api("/settings/organization");
+        const L = { users: "Usuários", leads: "Leads", companies: "Empresas", contacts: "Contatos", opportunities: "Oportunidades" };
+        pane.innerHTML = `<div class="card-block"><h3>Dados da organização</h3>
+          <form id="orgForm"><label>Nome</label><input name="name" value="${esc(o.name)}" ${o.canEdit ? "" : "disabled"} required minlength="2" maxlength="80" />
+          ${o.canEdit ? `<div class="modal-actions"><button class="btn btn-primary">Salvar</button></div>` : `<p class="field-help">Somente administradores podem alterar.</p>`}</form>
+          <p class="note">Criada em ${fmtDateTime(o.createdAt)}. Os dados de cada organização são totalmente isolados das outras.</p></div>
+          <div class="cards" style="margin-top:14px">${Object.entries(o.counts).map(([k, v]) => `<div class="card"><div class="label">${L[k]}</div><div class="value">${v}</div></div>`).join("")}</div>`;
+        document.getElementById("orgForm").addEventListener("submit", async (e) => {
+          e.preventDefault();
+          try { await api("/settings/organization", { method: "PATCH", body: { name: e.target.name.value.trim() } }); toast("Organização atualizada."); }
+          catch (er) { toast(er.message, "err"); }
+        });
+      } catch (e) { pane.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+    }
+
+    async function usersTab() {
+      const pane = document.getElementById("pane");
+      if (!can("settings.users")) return denied(pane);
+      try {
+        const r = await api("/settings/users");
+        const opts = (sel) => r.roles.map((x) => `<option value="${x.value}" ${x.value === sel ? "selected" : ""}>${esc(x.label)}</option>`).join("");
+        pane.innerHTML = `<div class="page-head"><h3>Usuários (${r.content.length})</h3><button class="btn btn-primary" id="newUser">Novo usuário</button></div>
+          <table class="grid"><thead><tr><th>Nome</th><th>E-mail</th><th>Papel</th><th>Status</th><th></th></tr></thead><tbody>
+          ${r.content.map((u) => `<tr data-id="${u.id}"><td>${esc(u.name)}${u.id === ME.id ? ' <span class="muted">(você)</span>' : ""}</td><td>${esc(u.email)}</td>
+            <td><select class="role" ${u.id === ME.id ? "disabled" : ""}>${opts(u.role)}</select></td>
+            <td>${u.active ? '<span class="badge st-QUALIFICADO">Ativo</span>' : '<span class="badge st-PERDIDO">Inativo</span>'}</td>
+            <td style="white-space:nowrap"><button class="btn toggle" ${u.id === ME.id ? "disabled" : ""}>${u.active ? "Desativar" : "Ativar"}</button>
+            <button class="btn pw">Nova senha</button></td></tr>`).join("")}</tbody></table>
+          <dialog class="modal" id="dlg"><form id="uForm" method="dialog"><h3>Novo usuário</h3>
+            <label>Nome</label><input name="name" required maxlength="80" />
+            <label>E-mail</label><input name="email" type="email" required />
+            <label>Senha (mín. 8 caracteres)</label><input name="password" type="password" required minlength="8" maxlength="72" />
+            <label>Papel</label><select name="role">${opts("SALES")}</select>
+            <div class="modal-actions"><button type="button" class="btn" id="cancel">Cancelar</button><button class="btn btn-primary">Criar</button></div></form></dialog>`;
+        const dlg = document.getElementById("dlg");
+        document.getElementById("newUser").addEventListener("click", () => dlg.showModal());
+        document.getElementById("cancel").addEventListener("click", () => dlg.close());
+        document.getElementById("uForm").addEventListener("submit", async (e) => {
+          e.preventDefault(); const f = e.target;
+          try {
+            await api("/settings/users", { method: "POST", body: { name: f.name.value.trim(), email: f.email.value.trim(), password: f.password.value, role: f.role.value } });
+            dlg.close(); toast("Usuário criado."); usersTab();
+          } catch (er) { toast(er.message, "err"); }
+        });
+        const patch = async (id, body, msg) => { try { await api(`/settings/users/${id}`, { method: "PATCH", body }); toast(msg); usersTab(); } catch (er) { toast(er.message, "err"); usersTab(); } };
+        pane.querySelectorAll("tr[data-id]").forEach((tr) => {
+          const id = tr.dataset.id, u = r.content.find((x) => x.id == id);
+          tr.querySelector(".role").addEventListener("change", (e) => patch(id, { role: e.target.value }, "Papel atualizado."));
+          tr.querySelector(".toggle").addEventListener("click", () => patch(id, { active: !u.active }, u.active ? "Usuário desativado." : "Usuário ativado."));
+          tr.querySelector(".pw").addEventListener("click", () => {
+            const p = prompt(`Nova senha para ${u.name} (mín. 8 caracteres):`);
+            if (p) patch(id, { password: p }, "Senha alterada.");
+          });
+        });
+      } catch (e) { pane.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+    }
+
+    async function permsTab() {
+      const pane = document.getElementById("pane");
+      try {
+        const m = await api("/settings/permissions");
+        let group = "", rows = "";
+        m.permissions.forEach((p) => {
+          if (p.group !== group) { group = p.group; rows += `<tr class="perm-group"><td colspan="${m.roles.length + 1}">${esc(group)}</td></tr>`; }
+          rows += `<tr><td>${esc(p.label)}${p.locked ? ' <span class="muted">(fixa)</span>' : ""}</td>${m.roles.map((r) => {
+            const v = p.values[r.value];
+            return `<td><input type="checkbox" aria-label="${esc(p.label)} — ${esc(r.label)}" data-p="${p.key}" data-r="${r.value}" ${v.allowed ? "checked" : ""} ${v.fixed || !m.canEdit ? "disabled" : ""} />${v.custom ? '<span class="perm-custom" title="Diferente do padrão">●</span>' : ""}</td>`;
+          }).join("")}</tr>`;
+        });
+        pane.innerHTML = `<div class="page-head"><h3>Matriz de permissões</h3>${m.canEdit ? '<button class="btn" id="reset">Restaurar padrão</button>' : ""}</div>
+          <table class="grid perm-table"><thead><tr><th>Permissão</th>${m.roles.map((r) => `<th>${esc(r.label)}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table>
+          <p class="note">Administradores sempre têm tudo e as permissões de Configurações são fixas (evita se trancar fora do sistema). ● = alterado em relação ao padrão. ${m.canEdit ? "" : "Somente administradores podem editar."}</p>`;
+        pane.querySelectorAll("input[data-p]").forEach((cb) => cb.addEventListener("change", async () => {
+          try { await api("/settings/permissions", { method: "PUT", body: { role: cb.dataset.r, permission: cb.dataset.p, allowed: cb.checked } }); permsTab(); }
+          catch (er) { toast(er.message, "err"); permsTab(); }
+        }));
+        const rs = document.getElementById("reset");
+        if (rs) rs.addEventListener("click", async () => {
+          if (!confirm("Restaurar todas as permissões para o padrão?")) return;
+          try { await api("/settings/permissions", { method: "DELETE" }); toast("Permissões restauradas."); permsTab(); } catch (er) { toast(er.message, "err"); }
+        });
+      } catch (e) { pane.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+    }
+    init();
+  </script>
+</body>
+</html>
