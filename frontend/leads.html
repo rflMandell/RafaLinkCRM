@@ -52,8 +52,10 @@
           items.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join("")
         );
       };
-      fill("fstatus", options.statuses.map((s) => [s, STATUS_LABEL[s]]));
-      fill("fchannel", options.channels.map((c) => [c, CHANNEL_LABEL[c]]));
+      
+      // Validação de segurança para os labels de canais e status
+      fill("fstatus", options.statuses.map((s) => [s, (typeof STATUS_LABEL !== "undefined" && STATUS_LABEL[s]) || s]));
+      fill("fchannel", options.channels.map((c) => [c, (typeof CHANNEL_LABEL !== "undefined" && CHANNEL_LABEL[c]) || c]));
       fill("fowner", options.owners.map((o) => [o.id, o.name]));
       fill("fcampaign", options.campaigns.map((c) => [c.id, c.name]));
 
@@ -105,37 +107,47 @@
 
     function renderTable(data) {
       const box = document.getElementById("tableBox");
-      if (data.content.length === 0) {
+      if (!data || !data.content || data.content.length === 0) {
         box.innerHTML = `<div class="empty">Nenhum lead encontrado.</div>`;
       } else {
         box.innerHTML = `
           <table class="grid">
-            <thead><tr>
-                  <td>${esc(l.source || "—")}<div class="muted">${esc(CHANNEL_LABEL[l.channel] || "—")}</div>
-                    ${l.campaignName ? `<div class="muted">Campanha: ${esc(l.campaignName)}</div>` : ""}</td>
-              <th>Score</th><th>Status</th><th>Criado em</th><th>Próxima ação</th>
-            </tr></thead>
+            <thead>
+              <tr>
+                <th>Lead / Empresa</th>
+                <th>Origem / Canal</th>
+                <th>Responsável</th>
+                <th>Score</th>
+                <th>Status</th>
+                <th>Criado em</th>
+                <th>Próxima ação</th>
+              </tr>
+            </thead>
             <tbody>
-              ${data.content.map((l) => `
+              ${data.content.map((l) => {
+                const channelText = (typeof CHANNEL_LABEL !== "undefined" && CHANNEL_LABEL[l.channel]) || l.channel || "—";
+                return `
                 <tr class="clickable" data-id="${l.id}">
                   <td><strong>${esc(l.name)}</strong><div class="muted">${esc(l.company || "—")}</div></td>
-                  <td>${esc(l.source || "—")}<div class="muted">${esc(CHANNEL_LABEL[l.channel] || "—")}</div></td>
+                  <td>${esc(l.source || "—")}<div class="muted">${esc(channelText)}</div>
+                    ${l.campaignName ? `<div class="muted">Campanha: ${esc(l.campaignName)}</div>` : ""}</td>
                   <td>${esc(l.ownerName || "—")}</td>
                   <td class="score">${l.score}</td>
-                  <td>${statusBadge(l.status)}</td>
-                  <td>${fmtDate(l.createdAt)}</td>
+                  <td>${typeof statusBadge === "function" ? statusBadge(l.status) : l.status}</td>
+                  <td>${typeof fmtDate === "function" ? fmtDate(l.createdAt) : l.createdAt}</td>
                   <td>${esc(l.nextAction || "—")}</td>
-                </tr>`).join("")}
+                </tr>`;
+              }).join("")}
             </tbody>
           </table>`;
       }
 
-      const pages = Math.max(data.totalPages, 1);
+      const pages = Math.max(data.totalPages || 1, 1);
       document.getElementById("pager").innerHTML = `
-        <span>Página ${data.page + 1} de ${pages} · ${data.totalElements} leads</span>
+        <span>Página ${(data.page || 0) + 1} de ${pages} · ${data.totalElements || 0} leads</span>
         <div>
           <button class="btn" id="prev" ${data.page === 0 ? "disabled" : ""}>Anterior</button>
-          <button class="btn" id="next" ${data.page + 1 >= pages ? "disabled" : ""}>Próxima</button>
+          <button class="btn" id="next" ${(data.page || 0) + 1 >= pages ? "disabled" : ""}>Próxima</button>
         </div>`;
       document.getElementById("prev").addEventListener("click", () => { state.page--; load(); });
       document.getElementById("next").addEventListener("click", () => { state.page++; load(); });
