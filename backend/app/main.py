@@ -73,7 +73,7 @@ api_v1.include_router(settings.router)
 api_v1.include_router(search.router)
 api_v1.include_router(importer.router)
 api_v1.include_router(dedupe.router)
-app_.include_router(api_v1)
+app.include_router(api_v1)
 
 # O backend também serve o frontend: tudo em http://localhost:8000
 # (precisa ficar DEPOIS das rotas da API)
