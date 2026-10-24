@@ -1,0 +1,1 @@
+> **Rodar o projeto:** `python start.py` (veja [docs/DESENVOLVIMENTO.md](docs/DESENVOLVIMENTO.md)).

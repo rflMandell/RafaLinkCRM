@@ -9,7 +9,7 @@ from ..errors import AppError
 from ..events import publish
 from ..security import get_current_user, require_roles
 from ..services import check_owner
-from ..permissions import require_perm
+from ..permissions import has_perm, require_perm
 
 router = APIRouter(prefix="/goals", tags=["Goals"])
 
@@ -152,7 +152,7 @@ def options(db=Depends(get_db), user=Depends(get_current_user)):
     return {
         "metrics": [{"value": k, "label": v} for k, v in METRIC_LABEL.items()],
         "owners": [dict(o) for o in owners],
-        "canManage": user["role"] in MANAGERS,
+        "canManage": has_perm(db, user, "goals.manage"),
     }
 
 
@@ -182,7 +182,7 @@ def list_goals(
         "periodStart": start.isoformat(),
         "periodEnd": (end - timedelta(days=1)).isoformat(),
         "goals": goals,
-        "canManage": user["role"] in MANAGERS,
+        "canManage": has_perm(db, user, "goals.manage"),
     }
 
 

@@ -1,9 +1,13 @@
+import logging
+import sqlite3
 from datetime import datetime, timezone
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
+
+log = logging.getLogger("rafalink")
 
 
 class AppError(Exception):
@@ -52,8 +56,33 @@ def register_error_handlers(app: FastAPI) -> None:
             content=_body(400, "VALIDATION_ERROR", f"Requisição inválida ({details}).", request.url.path),
         )
 
+    @app.exception_handler(sqlite3.IntegrityError)
+    async def integrity_error(request: Request, exc: sqlite3.IntegrityError):
+        log.warning("Conflito de integridade em %s %s: %s", request.method, request.url.path, exc)
+        return JSONResponse(
+            status_code=409,
+            content=_body(409, "DATA_CONFLICT",
+                          "Esses dados entram em conflito com algo que já existe ou que está em uso.",
+                          request.url.path),
+        )
+
+    @app.exception_handler(sqlite3.OperationalError)
+    async def database_busy(request: Request, exc: sqlite3.OperationalError):
+        log.error("Erro de banco em %s %s: %s", request.method, request.url.path, exc)
+        if "locked" in str(exc).lower() or "busy" in str(exc).lower():
+            return JSONResponse(
+                status_code=503,
+                content=_body(503, "DATABASE_BUSY", "O banco está ocupado. Tente de novo em instantes.", request.url.path),
+            )
+        return JSONResponse(
+            status_code=500,
+            content=_body(500, "INTERNAL_ERROR", "Erro inesperado.", request.url.path),
+        )
+
     @app.exception_handler(Exception)
     async def unexpected_error(request: Request, exc: Exception):
+        # Antes o erro sumia; agora o traceback completo vai para o terminal e para backend/data/rafalink.log.
+        log.error("Erro inesperado em %s %s", request.method, request.url.path, exc_info=exc)
         return JSONResponse(
             status_code=500,
             content=_body(500, "INTERNAL_ERROR", "Erro inesperado.", request.url.path),

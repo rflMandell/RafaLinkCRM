@@ -7,7 +7,7 @@ from ..database import get_db, now_iso
 from ..errors import AppError
 from ..events import publish
 from ..security import get_current_user, require_roles
-from ..permissions import require_perm
+from ..permissions import has_perm, require_perm
 
 router = APIRouter(prefix="/sla", tags=["SLA"])
 
@@ -161,7 +161,7 @@ def overview(owner: int | None = None, db=Depends(get_db), user=Depends(get_curr
         "totalWarning": sum(s["warning"] for s in summary.values()),
         "items": items[:200],
         "owners": [dict(t) for t in team],
-        "canManage": user["role"] in MANAGERS,
+        "canManage": has_perm(db, user, "goals.manage"),
     }
 
 

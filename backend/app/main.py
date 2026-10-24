@@ -1,4 +1,7 @@
+import logging
+import os
 from contextlib import asynccontextmanager
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from fastapi import APIRouter, FastAPI
@@ -6,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from .database import run_migrations
-from .errors import register_error_handlers
+from .errors import AppError, register_error_handlers
 from .routers import (
     activities, auth, campaigns, companies, contacts, customers, forecast, goals, leads,
     opportunities, pipelines, reports, sla, ai, automations, audit, notifications, settings, search, importer, dedupe
@@ -17,11 +20,35 @@ from .worker import start_worker
 
 FRONTEND_DIR = Path(__file__).resolve().parents[2] / "frontend"
 
+LOG_FILE = Path(__file__).resolve().parents[1] / "data" / "rafalink.log"
+
+
+def setup_logging() -> None:
+    """Erros e avisos aparecem no terminal e ficam guardados em backend/data/rafalink.log."""
+    logger = logging.getLogger("rafalink")
+    if logger.handlers:
+        return
+    logger.setLevel(logging.INFO)
+    fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+    console = logging.StreamHandler()
+    console.setFormatter(fmt)
+    logger.addHandler(console)
+    try:
+        LOG_FILE.parent.mkdir(exist_ok=True)
+        file = RotatingFileHandler(LOG_FILE, maxBytes=1_000_000, backupCount=3, encoding="utf-8")
+        file.setFormatter(fmt)
+        logger.addHandler(file)
+    except OSError:
+        pass                                       # sem permissão de escrita: segue só com o terminal
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    setup_logging()
     run_migrations()
     seed()
+    if os.getenv("RAFALINK_NO_WORKER") != "1":   # os testes desligam a automação em segundo plano
+        start_worker()
     yield
 
 
@@ -74,6 +101,11 @@ api_v1.include_router(search.router)
 api_v1.include_router(importer.router)
 api_v1.include_router(dedupe.router)
 app.include_router(api_v1)
+
+# Endereço inexistente dentro de /api devolve JSON 404 (sem isso cairia no servidor de páginas, que devolve HTML).
+@app.api_route("/api/{rest:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"], include_in_schema=False)
+def api_not_found(rest: str):
+    raise AppError(404, "NOT_FOUND", "Recurso não encontrado.")
 
 # O backend também serve o frontend: tudo em http://localhost:8000
 # (precisa ficar DEPOIS das rotas da API)

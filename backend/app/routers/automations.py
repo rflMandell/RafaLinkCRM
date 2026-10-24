@@ -9,7 +9,7 @@ from ..database import get_db, now_iso
 from ..errors import AppError
 from ..events import publish
 from ..security import get_current_user, require_roles
-from ..permissions import require_perm
+from ..permissions import has_perm, require_perm
 
 router = APIRouter(prefix="/automations", tags=["Automações"])
 
@@ -60,7 +60,7 @@ def list_rules(db=Depends(get_db), user=Depends(get_current_user)):
             "actions": [{"key": k, "label": v} for k, v in ACTIONS.items()],
             "recipients": [{"key": k, "label": v} for k, v in RECIPIENTS.items()],
         },
-        "canManage": user["role"] in MANAGER_ROLES,
+        "canManage": has_perm(db, user, "automation.manage"),
     }
 
 

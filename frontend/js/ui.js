@@ -274,3 +274,10 @@ function settingsNav(active) {
   const tabs = [["settings.html", "Organização, usuários e permissões", "settings"], ["import.html", "Importar CSV", "import"], ["dedupe.html", "Duplicados", "dedupe"]];
   return `<nav class="subnav">${tabs.map(([h, l, k]) => `<a href="${h}" class="${k === active ? "active" : ""}">${l}</a>`).join("")}</nav>`;
 }
+
+// ---------- Etapa 11: rede de segurança ----------
+// Se alguma chamada à API falhar sem que a página trate o erro, mostra um aviso em vez de ficar muda.
+window.addEventListener("unhandledrejection", (e) => {
+  const msg = e.reason && e.reason.message;
+  if (msg && document.getElementById("toasts")) toast(msg, "err");
+});

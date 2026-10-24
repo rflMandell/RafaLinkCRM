@@ -12,7 +12,7 @@ from ..scoring import (
     score_lead, sla_limits,
 )
 from ..security import get_current_user, require_roles
-from ..permissions import require_perm
+from ..permissions import has_perm, require_perm
 
 router = APIRouter(prefix="/ai", tags=["IA simulada"])
 MANAGERS = ("ADMIN", "SALES_MANAGER")
@@ -92,7 +92,7 @@ def overview(owner: int | None = None, db=Depends(get_db), user=Depends(get_curr
         "worklist": worklist[:30],
         "thresholds": {"hot": HOT_MIN, "warm": WARM_MIN, "churnHigh": CHURN_HIGH, "churnMid": CHURN_MID},
         "owners": [dict(t) for t in team] if user["role"] in MANAGERS else [],
-        "canManage": user["role"] in MANAGERS,
+        "canManage": has_perm(db, user, "ai.weights"),
     }
 
 
@@ -218,7 +218,7 @@ def _weights_dto(db, org: int, can_manage: bool) -> dict:
 
 @router.get("/weights")
 def get_weights(db=Depends(get_db), user=Depends(get_current_user)):
-    return _weights_dto(db, user["organization_id"], user["role"] in MANAGERS)
+    return _weights_dto(db, user["organization_id"], has_perm(db, user, "ai.weights"))
 
 
 @router.put("/weights")
