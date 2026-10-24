@@ -6,7 +6,7 @@
 
 **Centralize leads, contatos, empresas e oportunidades em uma experiência integrada de CRM.**
 
-[Aplicação online](https://rafalinkfront.vercel.app/) · [Guia de desenvolvimento](docs/DESENVOLVIMENTO.md) · [Documentação da API](http://localhost:8000/docs)
+[Guia de desenvolvimento](docs/DESENVOLVIMENTO.md)
 
 </div>
 
