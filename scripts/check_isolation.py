@@ -24,6 +24,9 @@ def call(path, token=None, body=None):
         with urllib.request.urlopen(req) as r:
             return r.status, json.loads(r.read() or b"null")
     except urllib.error.HTTPError as e:
+        # as linhas que estao comentadas abaixo, devem ser descomentadas se quiser ver o corpo do erro HTTP para melhor tratamento de erros
+        #error_body = e.read().decode("utf-8", errors="replace")
+        #print(f"\nERRO HTTP {e.code} em {path}: {error_body}")
         return e.code, None
 
 
@@ -50,7 +53,7 @@ for key, (email, pwd) in TENANTS.items():
 for entity in LISTS:
     seen = {}
     for key in TENANTS:
-        status, data = call(f"/{entity}?size=200", tokens[key])
+        status, data = call(f"/{entity}?size=100", tokens[key])
         seen[key] = set(ids_of(data)) if status == 200 and data is not None else None
     if seen["A"] is None or seen["B"] is None:
         print(f"- {entity}: lista indisponível (pulado)")

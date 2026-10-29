@@ -77,7 +77,7 @@ python start.py --demo
 
 Cria 12 empresas, 30 contatos, ~50 leads, 22 oportunidades e 40 atividades com datas dos últimos 90 dias, mais
 3 pares de leads duplicados para você testar **Configurações > Duplicados**. Rodar de novo não duplica nada
-(`--force` no `scripts/seed_demo.py` cria mais).
+(`--force` no `scripts/seed_demo.py` cria mais
 
 ## Isolamento entre empresas
 
